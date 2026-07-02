@@ -8,11 +8,27 @@
  *
  * The result is a reviewable plan; generation/validation happen separately.
  */
-import type { LLMProvider, ChatMessage, ToolDefinition } from "../llm/index.js";
+import { z } from "zod";
+import {
+  callStructured,
+  type LLMProvider,
+  type ChatMessage,
+  type ToolDefinition,
+} from "../llm/index.js";
 import type { ModuleRegistry } from "../modules/registry.js";
 import type { NfCoreModule } from "../modules/types.js";
 import type { QueryContext } from "../conversation/session.js";
 import type { CompositionPlan, ResolvedComposition } from "./types.js";
+
+const suggestSchema = z.object({ terms: z.array(z.string()).catch([]) });
+
+const composeSchema = z.object({
+  pipelineName: z.string().catch("hirshpipeline"),
+  description: z.string().catch("Composed nf-core pipeline."),
+  steps: z
+    .array(z.object({ module: z.string(), rationale: z.string().catch("") }))
+    .catch([]),
+});
 
 const SUGGEST_TOOL: ToolDefinition = {
   name: "suggest_tools",
@@ -86,11 +102,8 @@ async function suggestTerms(provider: LLMProvider, query: QueryContext): Promise
     },
     { role: "user", content: intentText(query) },
   ];
-  const resp = await provider.chat({ messages, tools: [SUGGEST_TOOL], forceTool: SUGGEST_TOOL.name });
-  const call = resp.toolCalls.find((c) => c.name === SUGGEST_TOOL.name);
-  const terms = call?.arguments.terms;
-  if (Array.isArray(terms)) return terms.filter((t): t is string => typeof t === "string");
-  return [];
+  const data = await callStructured(provider, { messages, tool: SUGGEST_TOOL, schema: suggestSchema });
+  return data?.terms ?? [];
 }
 
 function sanitizeName(name: string): string {
@@ -151,26 +164,16 @@ export async function planComposition(
     },
   ];
 
-  const resp = await provider.chat({ messages, tools: [tool], forceTool: tool.name });
-  const call = resp.toolCalls.find((c) => c.name === tool.name);
-  if (!call) return null;
+  const data = await callStructured(provider, { messages, tool, schema: composeSchema });
+  if (!data) return null;
 
-  const a = call.arguments as Record<string, unknown>;
-  const rawSteps = Array.isArray(a.steps) ? a.steps : [];
   const byName = new Map(candidates.map((c) => [c.name, c]));
-  const steps = rawSteps
-    .map((s) => (typeof s === "object" && s ? (s as Record<string, unknown>) : {}))
-    .map((s) => ({
-      module: typeof s.module === "string" ? s.module : "",
-      rationale: typeof s.rationale === "string" ? s.rationale : "",
-    }))
-    .filter((s) => byName.has(s.module));
-
+  const steps = data.steps.filter((s) => byName.has(s.module));
   if (steps.length === 0) return null;
 
   const plan: CompositionPlan = {
-    pipelineName: sanitizeName(typeof a.pipelineName === "string" ? a.pipelineName : "hirshpipeline"),
-    description: typeof a.description === "string" ? a.description : "Composed nf-core pipeline.",
+    pipelineName: sanitizeName(data.pipelineName),
+    description: data.description,
     steps,
   };
 

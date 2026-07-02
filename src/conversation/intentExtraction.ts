@@ -10,8 +10,25 @@
  * intent alone. That is why we force explicit extraction of organism, data /
  * sequencing type, objective and experimental design.
  */
-import type { LLMProvider, ChatMessage, ToolDefinition } from "../llm/index.js";
+import { z } from "zod";
+import {
+  callStructured,
+  looseBoolean,
+  nullableText,
+  type LLMProvider,
+  type ChatMessage,
+  type ToolDefinition,
+} from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
+
+const intentSchema = z.object({
+  organism: nullableText,
+  dataType: nullableText,
+  objective: nullableText,
+  experimentalDesign: nullableText,
+  enough: looseBoolean.catch(false),
+  nextQuestion: nullableText,
+});
 
 export interface IntentResult {
   organism: string | null;
@@ -99,10 +116,9 @@ export async function extractIntent(
     })),
   ];
 
-  const resp = await provider.chat({ messages, tools: [TOOL], forceTool: TOOL.name });
-  const call = resp.toolCalls.find((c) => c.name === TOOL.name);
-  if (!call) {
-    // Defensive fallback: if the model did not call the tool, ask for more context.
+  const data = await callStructured(provider, { messages, tool: TOOL, schema: intentSchema });
+  if (!data) {
+    // The model never produced a valid record_intent call (even after a retry).
     return {
       organism: null,
       dataType: null,
@@ -114,19 +130,12 @@ export async function extractIntent(
     };
   }
 
-  const a = call.arguments as Record<string, unknown>;
-  const str = (v: unknown): string | null =>
-    typeof v === "string" && v.trim().length > 0 && v.trim().toLowerCase() !== "null"
-      ? v.trim()
-      : null;
-
-  const enough = a.enough === true;
   return {
-    organism: str(a.organism),
-    dataType: str(a.dataType),
-    objective: str(a.objective),
-    experimentalDesign: str(a.experimentalDesign),
-    enough,
-    nextQuestion: enough ? null : str(a.nextQuestion),
+    organism: data.organism,
+    dataType: data.dataType,
+    objective: data.objective,
+    experimentalDesign: data.experimentalDesign,
+    enough: data.enough,
+    nextQuestion: data.enough ? null : data.nextQuestion,
   };
 }

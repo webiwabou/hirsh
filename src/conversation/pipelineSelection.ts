@@ -5,9 +5,21 @@
  * suitable pipeline, or returns "none" if none honestly applies (we do not force
  * a bad match).
  */
-import type { LLMProvider, ChatMessage, ToolDefinition } from "../llm/index.js";
+import { z } from "zod";
+import {
+  callStructured,
+  nullableText,
+  type LLMProvider,
+  type ChatMessage,
+  type ToolDefinition,
+} from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
 import type { QueryContext } from "./session.js";
+
+const selectionSchema = z.object({
+  pipelineName: nullableText,
+  rationale: z.string().catch(""),
+});
 
 export interface SelectionResult {
   /** Name of the chosen pipeline, or null if none applies. */
@@ -74,16 +86,11 @@ export async function selectPipeline(
     { role: "system", content: systemPrompt(registry, query) },
     { role: "user", content: "Choose the right pipeline for my case." },
   ];
-  const resp = await provider.chat({ messages, tools: [tool], forceTool: tool.name });
-  const call = resp.toolCalls.find((c) => c.name === tool.name);
-  if (!call) {
+  const data = await callStructured(provider, { messages, tool, schema: selectionSchema });
+  if (!data) {
     return { pipelineName: null, rationale: "I could not determine a pipeline from the available information." };
   }
-  const a = call.arguments as Record<string, unknown>;
-  const name = typeof a.pipelineName === "string" && a.pipelineName.trim() ? a.pipelineName.trim() : null;
+  const name = data.pipelineName?.trim() || null;
   const valid = name && registry.some((p) => p.name === name) ? name : null;
-  return {
-    pipelineName: valid,
-    rationale: typeof a.rationale === "string" ? a.rationale : "",
-  };
+  return { pipelineName: valid, rationale: data.rationale };
 }

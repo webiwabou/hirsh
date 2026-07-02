@@ -87,8 +87,12 @@ Make every supported pipeline safe to run for real and make its output land as
   users can point at an existing samplesheet, which is validated against the
   pipeline's column spec (`validateSamplesheetContent`, unit-tested).
   - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
-- ⬜ **Schema-validated LLM outputs** with one self-correcting retry, so weaker
-  local models stay reliable.
+- ✅ **Schema-validated LLM outputs** with one self-correcting retry. Tool-call
+  arguments (intent, pipeline selection, composition planning) are validated with
+  Zod via `llm/structured.ts`; on a missing/invalid call the model is re-prompted
+  once and, if it still fails, the caller falls back gracefully. Makes weaker local
+  models (e.g. small Ollama models) far more reliable. Unit-tested with a mock
+  provider; verified live end-to-end.
 - ✅ **Reproducibility bundle.** Every run writes `run_manifest.json` +
   `PROVENANCE.md` into the run directory, capturing the pipeline + pinned revision,
   the exact command, resolved params (`params.yaml`), samplesheet, environment

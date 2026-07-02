@@ -6,6 +6,7 @@ import { OllamaProvider } from "./ollama.js";
 import { type LLMProvider, ProviderError } from "./provider.js";
 
 export * from "./provider.js";
+export { callStructured, nullableText, looseBoolean } from "./structured.js";
 
 /**
  * Builds the active LLM provider from config.
