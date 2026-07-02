@@ -119,6 +119,9 @@ execution:
 memory:
   enabled: true             # remember past analyses across sessions (local, private)
   # path: ~/.bioagent/memory.json
+autonomy:
+  enabled: false            # or pass --auto: run reversible steps unattended,
+                            # still asking for missing info and consequential decisions
 ```
 
 > **Tool calling required.** Intent extraction and pipeline selection use tool
@@ -131,7 +134,7 @@ memory:
 provider: anthropic
 anthropic:
   apiKeyEnv: ANTHROPIC_API_KEY   # NAME of the env var, not the key itself
-  model: claude-3-5-haiku-20241022
+  model: claude-fable-5          # any tool-calling-capable Claude model works
   temperature: 0.2
   maxTokens: 4096
 execution:
@@ -240,6 +243,16 @@ Every run also writes a **reproducibility bundle** into its run directory —
 and pinned revision, the exact command, resolved parameters, samplesheet,
 environment and execution status — so an analysis can be archived, shared and
 reproduced.
+
+## Autonomous mode
+
+With `autonomy.enabled` in the config (or the `--auto` flag), Hirsh runs a request
+to an interpreted answer without pausing for **reversible** confirmations — it
+auto-answers those with their intended value and prints each `[auto]` decision —
+while still **asking when information is genuinely missing** (e.g. where your FASTQ
+files are) and **stopping at decisions only you should make**: publishing,
+overriding a resource/disk safety refusal, or otherwise running against advice. The
+guardrail is structural — consequential prompts are tagged and never auto-answered.
 
 ## Project memory
 

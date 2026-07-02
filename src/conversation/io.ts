@@ -16,8 +16,19 @@ export interface AgentIO {
   heading(text: string): void;
   /** Open question; returns the user's answer (text). */
   ask(question: string): Promise<string>;
-  /** Yes/no confirmation (accepts natural-language yes/no phrasings). */
-  confirm(question: string, defaultYes?: boolean): Promise<boolean>;
+  /**
+   * Yes/no confirmation (accepts natural-language yes/no phrasings).
+   *
+   * `opts.consequential` marks a decision only a human should make (publishing,
+   * spending, overriding a safety recommendation) — an autonomous frontend must
+   * still ask these. `opts.auto` is the value to use in autonomous mode when the
+   * decision is NOT consequential (defaults to `defaultYes`).
+   */
+  confirm(
+    question: string,
+    defaultYes?: boolean,
+    opts?: { consequential?: boolean; auto?: boolean },
+  ): Promise<boolean>;
   /**
    * Like confirm, but a natural-language answer that isn't a clear yes/no is
    * returned as free text so the caller can act on it (e.g. a redirect). Empty

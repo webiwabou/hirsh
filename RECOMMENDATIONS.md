@@ -313,9 +313,17 @@ The full realization: a scientific collaborator, not a command builder.
   (`results/methods.ts`, unit-tested; verified render).
   - ⬜ Remaining: generate figures and a fuller reproducible report; per-tool
     citations inline (today they point to CITATIONS.md).
-- ⬜ **End-to-end autonomy with guardrails.** Take a question all the way to an
-  interpreted answer, pausing only at the decisions that are the human's to make —
-  destructive actions, spending money, or publishing.
+- 🔵 **End-to-end autonomy with guardrails.** With `autonomy.enabled` (or `--auto`),
+  Hirsh runs a request to an interpreted answer without pausing for reversible
+  confirmations — it auto-answers those with their intended value and announces each
+  `[auto]` decision — while still **asking for genuinely missing information** and
+  **stopping at decisions only a human should make**: publishing, overriding a
+  safety recommendation (resource/disk refusal), or running against advice.
+  Implemented as an `AutonomousIO` decorator over the confirmation layer, so the
+  guardrail is structural: consequential confirms are tagged and never auto-answered
+  (`cli/autonomousIO.ts`, unit-tested).
+  - ⬜ Remaining: a fully non-interactive "one-shot" mode that also derives missing
+    parameters from context/memory instead of asking.
 
 ---
 
@@ -343,4 +351,4 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Interprets results as science, quantitatively and biologically — concrete numbers, meaning in context of the objective, and revisiting pre-run design caveats
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
 - 🔵 Contributes novel, standards-compliant modules and pipelines back to nf-core (packages + publishes to GitHub today; nf-core/modules PRs and inclusion next)
-- ⬜ Requires zero Nextflow/infra knowledge from the scientist
+- 🔵 Requires zero Nextflow/infra knowledge from the scientist (guided throughout; an autonomous mode runs reversible steps unattended)

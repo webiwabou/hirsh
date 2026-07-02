@@ -49,10 +49,20 @@ export interface MemoryConfig {
   path?: string;
 }
 
+export interface AutonomyConfig {
+  /**
+   * Run to an interpreted answer without pausing for reversible confirmations;
+   * still asks for missing info and stops at consequential decisions
+   * (publishing, spending, overriding a safety recommendation).
+   */
+  enabled: boolean;
+}
+
 export interface HirshConfig {
   provider: ProviderName;
   ollama: OllamaConfig;
   anthropic: AnthropicConfig;
   execution: ExecutionConfig;
   memory: MemoryConfig;
+  autonomy: AutonomyConfig;
 }

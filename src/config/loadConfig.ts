@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type {
   AnthropicConfig,
+  AutonomyConfig,
   ExecutionConfig,
   HirshConfig,
   MemoryConfig,
@@ -106,9 +107,20 @@ export function loadConfig(): { config: HirshConfig; sourcePath: string | null }
     anthropic: mergeAnthropic(raw.anthropic),
     execution: mergeExecution(raw.execution),
     memory: mergeMemory(raw.memory),
+    autonomy: mergeAutonomy(raw.autonomy),
   };
 
   return { config, sourcePath: found };
+}
+
+const DEFAULT_AUTONOMY: AutonomyConfig = { enabled: false };
+
+function mergeAutonomy(value: unknown): AutonomyConfig {
+  if (value === undefined) return { ...DEFAULT_AUTONOMY };
+  if (!isRecord(value)) throw new ConfigError('The "autonomy" section must be a map.');
+  return {
+    enabled: typeof value.enabled === "boolean" ? value.enabled : DEFAULT_AUTONOMY.enabled,
+  };
 }
 
 const DEFAULT_MEMORY: MemoryConfig = { enabled: true };

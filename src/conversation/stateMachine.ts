@@ -529,7 +529,9 @@ export class Agent {
 
   /** Assisted GitHub publishing — strictly opt-in, defaulting to a private repo. */
   private async offerPublish(dir: string, resolved: ResolvedComposition): Promise<void> {
-    const wants = await this.io.confirm("Publish this pipeline to a GitHub repository?", false);
+    const wants = await this.io.confirm("Publish this pipeline to a GitHub repository?", false, {
+      consequential: true,
+    });
     if (!wants) {
       this.io.info("Not publishing. The project is ready locally whenever you want to share it.");
       return;
@@ -546,6 +548,7 @@ export class Agent {
     const makePublic = await this.io.confirm(
       "Make the repository PUBLIC? (No = private, recommended)",
       false,
+      { consequential: true },
     );
     const visibility = makePublic ? "public" : "private";
 
@@ -557,6 +560,7 @@ export class Agent {
     const confirm = await this.io.confirm(
       `Create and push a ${visibility} GitHub repo "${name}" now?`,
       false,
+      { consequential: true },
     );
     if (!confirm) {
       this.io.info("Cancelled — nothing was published.");
@@ -797,7 +801,9 @@ export class Agent {
           this.io.warn(
             "Capping locally can't satisfy a hard memory floor, so it will very likely fail.",
           );
-          const override = await this.io.confirm("Run anyway against my recommendation?", false);
+          const override = await this.io.confirm("Run anyway against my recommendation?", false, {
+            consequential: true,
+          });
           if (!override) return false;
         }
         const caps = assessment.caps ?? {
@@ -956,7 +962,9 @@ export class Agent {
     }
     // insufficient
     this.io.warn(disk.message);
-    const go = await this.io.confirm("Try to run anyway despite low disk?", false);
+    const go = await this.io.confirm("Try to run anyway despite low disk?", false, {
+      consequential: true,
+    });
     if (!go) {
       this.io.info("Okay — not running. Free some space or use a larger work directory, then retry.");
       return false;
@@ -1022,7 +1030,9 @@ export class Agent {
       return false;
     }
 
-    const go = await this.io.confirm("Run this command now?", false);
+    // Running spends compute — but opting into autonomy authorizes it, so auto
+    // mode proceeds here (while the resource-refuse/disk gates above still stop).
+    const go = await this.io.confirm("Run this command now?", false, { auto: true });
     if (!go) {
       this.io.info("Not running anything. The command and samplesheet are ready if you want to launch it yourself.");
       this.writeRunProvenance(session, runDir, env, false);

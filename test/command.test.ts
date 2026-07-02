@@ -10,6 +10,7 @@ const baseConfig: HirshConfig = {
   anthropic: { apiKeyEnv: "X", model: "m", temperature: 0, maxTokens: 10 },
   execution: { containerEngine: "docker", workdir: "./runs" },
   memory: { enabled: false },
+  autonomy: { enabled: false },
 };
 
 describe("buildParamsObject", () => {

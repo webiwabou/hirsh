@@ -21,6 +21,8 @@ import {
   type Session,
 } from "../conversation/session.js";
 import { TerminalIO } from "./terminalIO.js";
+import { AutonomousIO } from "./autonomousIO.js";
+import type { AgentIO } from "../conversation/io.js";
 import { renderWelcome } from "./banner.js";
 
 const HELP = [
@@ -129,10 +131,22 @@ async function main(): Promise<void> {
     getHelp: () => HELP,
   });
 
+  // Autonomous mode: enabled by config or the --auto flag. It reduces friction
+  // (auto-answers reversible confirmations) but still asks for missing info and
+  // stops at consequential decisions.
+  const autonomous = config.autonomy.enabled || process.argv.slice(2).includes("--auto");
+  const agentIo: AgentIO = autonomous ? new AutonomousIO(io) : io;
+  if (autonomous) {
+    io.info(
+      "Autonomous mode: I'll proceed through reversible steps on my own and only stop for " +
+        "missing information or decisions that are yours (running-with-a-warning, publishing).",
+    );
+  }
+
   try {
     for (;;) {
       session = createSession();
-      const agent = new Agent(provider, config, registry, io);
+      const agent = new Agent(provider, config, registry, agentIo);
       try {
         await agent.run(session);
         const again = await io.confirm("\nStart another analysis?", false);
