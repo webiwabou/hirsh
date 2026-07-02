@@ -9,6 +9,7 @@ const baseConfig: HirshConfig = {
   ollama: { host: "http://localhost:11434", model: "m", temperature: 0 },
   anthropic: { apiKeyEnv: "X", model: "m", temperature: 0, maxTokens: 10 },
   execution: { containerEngine: "docker", workdir: "./runs" },
+  memory: { enabled: false },
 };
 
 describe("buildParamsObject", () => {

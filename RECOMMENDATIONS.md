@@ -279,8 +279,16 @@ one-off analysis into reusable, community-grade software.
 
 The full realization: a scientific collaborator, not a command builder.
 
-- ⬜ **Project memory.** Remember a scientist's datasets, references, past analyses
-  and preferences across sessions (opt-in, private).
+- 🔵 **Project memory.** Hirsh remembers past analyses across sessions in a local,
+  private JSON store (`~/.bioagent/memory.json`): each run's pipeline, intent
+  (organism/data/objective), references used, outdir and status. When a new request
+  resembles a past one it surfaces the relevant history ("similar past analyses:
+  …"), so it behaves like a collaborator that remembers rather than a command
+  builder that forgets. Enabled by default, disable with `memory.enabled: false`
+  (`memory/store.ts`, unit-tested; persistence verified round-trip).
+  - ⬜ Remaining: offer to reuse a remembered reference/samplesheet during
+    parameterization, remember backend/executor preferences, and a first-run
+    consent prompt.
 - ⬜ **Scientific dialogue.** Discuss experimental design, suggest appropriate
   analyses and controls, flag confounders and batch effects, and reason about the
   results' biological meaning.

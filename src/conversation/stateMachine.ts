@@ -24,6 +24,17 @@ import {
 } from "../execution/executor.js";
 import { negotiateInfrastructure } from "../execution/negotiation.js";
 import {
+  addRun,
+  defaultMemoryPath,
+  emptyMemory,
+  extractReferences,
+  loadMemory,
+  relevantRuns,
+  saveMemory,
+  type MemoryData,
+  type RunRecord,
+} from "../memory/store.js";
+import {
   assessDiskPressure,
   cacheEnvFor,
   defaultCacheDir,
@@ -58,7 +69,7 @@ import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand } from "./parameterFilling.js";
 import { selectPipeline } from "./pipelineSelection.js";
 import type { AgentIO } from "./io.js";
-import type { Session } from "./session.js";
+import type { Session, QueryContext } from "./session.js";
 
 type SelectOutcome =
   | { kind: "pipeline"; pipeline: PipelineDefinition }
@@ -88,6 +99,8 @@ export function coerceLike(
 }
 
 export class Agent {
+  private memory: MemoryData | null = null;
+
   constructor(
     private readonly provider: LLMProvider,
     private readonly config: HirshConfig,
@@ -97,6 +110,7 @@ export class Agent {
 
   async run(session: Session): Promise<void> {
     await this.phaseIntent(session);
+    this.surfacePastRuns(session.query);
     const outcome = await this.phaseSelect(session);
 
     if (outcome.kind === "compose") {
@@ -540,6 +554,62 @@ export class Agent {
           "  No conda dependency set — add one in environment.yml; nf-core requires a conda spec.",
         );
       }
+    }
+  }
+
+  // --- Project memory (Phase 6) ---
+
+  private memoryPath(): string {
+    return this.config.memory.path ?? defaultMemoryPath();
+  }
+
+  private mem(): MemoryData {
+    if (this.memory) return this.memory;
+    this.memory = this.config.memory.enabled ? loadMemory(this.memoryPath()) : emptyMemory();
+    return this.memory;
+  }
+
+  /** Shows relevant past analyses from project memory (opt-out via config). */
+  private surfacePastRuns(query: QueryContext): void {
+    if (!this.config.memory.enabled) return;
+    const past = relevantRuns(this.mem(), query, 3);
+    if (past.length === 0) return;
+    this.io.info("From your project memory — similar past analyses:");
+    for (const r of past) {
+      const status = r.executed ? (r.exitCode === 0 ? "completed" : "failed") : "prepared";
+      this.io.info(
+        `  • ${r.date.slice(0, 10)}: ${r.pipeline} — ${r.objective ?? r.dataType ?? "analysis"} (${status})`,
+      );
+      if (r.outdir) this.io.info(`      results: ${r.outdir}`);
+    }
+  }
+
+  /** Records a run into project memory (best-effort; never blocks). */
+  private recordRun(session: Session, executed: boolean, exitCode?: number): void {
+    if (!this.config.memory.enabled) return;
+    const pipeline = session.selectedPipeline;
+    if (!pipeline) return;
+    try {
+      const record: RunRecord = {
+        date: new Date().toISOString(),
+        pipeline: pipeline.name,
+        revision: pipeline.version,
+        organism: session.query.organism,
+        dataType: session.query.dataType,
+        objective: session.query.objective,
+        experimentalDesign: session.query.experimentalDesign,
+        samplesheet: session.samplesheetPath,
+        outdir: session.outdir,
+        references: extractReferences(session.paramValues),
+        engine: session.engine ?? this.config.execution.containerEngine,
+        executor: session.executor ? describeExecutor(session.executor) : "local machine",
+        executed,
+        exitCode,
+      };
+      this.memory = addRun(this.mem(), record);
+      saveMemory(this.memoryPath(), this.memory);
+    } catch {
+      /* never block on memory */
     }
   }
 
@@ -1050,6 +1120,8 @@ export class Agent {
     } catch {
       /* never block on provenance */
     }
+    // Phase 6: remember this analysis for future sessions (opt-out via config).
+    this.recordRun(session, executed, exitCode);
   }
 
   /** Phase E — locate and interpret the results. */

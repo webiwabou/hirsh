@@ -42,9 +42,17 @@ export interface ExecutionConfig {
   maxMemory?: string;
 }
 
+export interface MemoryConfig {
+  /** Remember analyses across sessions (stored locally, private). */
+  enabled: boolean;
+  /** Override the memory file location. */
+  path?: string;
+}
+
 export interface HirshConfig {
   provider: ProviderName;
   ollama: OllamaConfig;
   anthropic: AnthropicConfig;
   execution: ExecutionConfig;
+  memory: MemoryConfig;
 }

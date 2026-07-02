@@ -60,8 +60,10 @@ src/
 │   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs + manifest patch for sharing (Phase 5)
 │   ├── contribution.ts  writes a local tool in nf-core/modules layout + nf-test for a PR (Phase 5)
 │   └── validate.ts   `nextflow config` + `-profile test -stub-run` + `nf-core lint` gate
-└── results/
-    └── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
+├── results/
+│   └── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
+└── memory/
+    └── store.ts      persistent project memory — past runs, references, recall (Phase 6)
 
 test/                 Vitest suite for the pure logic (resources, samplesheet,
                       command building, config loading, workflow generation)

@@ -17,6 +17,7 @@ import type {
   AnthropicConfig,
   ExecutionConfig,
   HirshConfig,
+  MemoryConfig,
   OllamaConfig,
   ProviderName,
 } from "./types.js";
@@ -104,9 +105,21 @@ export function loadConfig(): { config: HirshConfig; sourcePath: string | null }
     ollama: mergeOllama(raw.ollama),
     anthropic: mergeAnthropic(raw.anthropic),
     execution: mergeExecution(raw.execution),
+    memory: mergeMemory(raw.memory),
   };
 
   return { config, sourcePath: found };
+}
+
+const DEFAULT_MEMORY: MemoryConfig = { enabled: true };
+
+function mergeMemory(value: unknown): MemoryConfig {
+  if (value === undefined) return { ...DEFAULT_MEMORY };
+  if (!isRecord(value)) throw new ConfigError('The "memory" section must be a map.');
+  return {
+    enabled: typeof value.enabled === "boolean" ? value.enabled : DEFAULT_MEMORY.enabled,
+    path: typeof value.path === "string" ? value.path : undefined,
+  };
 }
 
 function normalizeProvider(value: unknown): ProviderName {

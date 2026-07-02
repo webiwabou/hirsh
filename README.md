@@ -116,6 +116,9 @@ execution:
   # If unset, Hirsh uses the detected machine as the budget.
   # maxMemory: 30.GB
   # maxCpus: 8
+memory:
+  enabled: true             # remember past analyses across sessions (local, private)
+  # path: ~/.bioagent/memory.json
 ```
 
 > **Tool calling required.** Intent extraction and pipeline selection use tool
@@ -230,6 +233,15 @@ Every run also writes a **reproducibility bundle** into its run directory —
 and pinned revision, the exact command, resolved parameters, samplesheet,
 environment and execution status — so an analysis can be archived, shared and
 reproduced.
+
+## Project memory
+
+Hirsh remembers your past analyses across sessions in a **local, private** store
+(`~/.bioagent/memory.json`): each run's pipeline, intent (organism/data/objective),
+references used, output directory and status. When a new request resembles a past
+one, it surfaces the relevant history ("From your project memory — similar past
+analyses: …") so you can pick up where you left off. It's on by default and stays
+on your machine; disable it with `memory.enabled: false`.
 
 ## Resource awareness
 
