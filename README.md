@@ -299,6 +299,9 @@ step), Hirsh builds one from real [nf-core/modules](https://github.com/nf-core/m
 4. It validates that the config parses (`nextflow config`) and **runs the whole
    pipeline end-to-end via `-profile test -stub-run`** (no data or containers) as
    the "does it actually run" gate.
+5. If the `nf-core` CLI is available, it offers to run **`nf-core lint`** on the
+   project and reports the pass/warn/fail counts and top failures (advisory — a
+   freshly composed project isn't fully lint-green yet).
 
 The wiring connects each module input to the right upstream output by data kind
 (reads, bam, vcf, fasta, indexes, reports…), rebuilds multi-file tuples, carries

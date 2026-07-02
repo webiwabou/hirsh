@@ -55,7 +55,7 @@ src/
 │   ├── wiring.ts     channel-type matcher → runnable DSL2 workflow (pure)
 │   ├── localModule.ts  custom (non-nf-core) tools → standards-compliant modules/local/ (Phase 4)
 │   ├── generator.ts  writes an nf-core-structured project + installs the modules
-│   └── validate.ts   `nextflow config` + `-profile test -stub-run` gate
+│   └── validate.ts   `nextflow config` + `-profile test -stub-run` + `nf-core lint` gate
 └── results/
     └── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
 

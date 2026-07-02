@@ -210,12 +210,17 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   version collection via the `versions` topic, `CITATIONS.md`, `.nf-core.yml`, and
   `nextflow.config` with container profiles, resource limits and a **mandatory
   `test` profile** (wired with placeholder data so the stub run works unedited).
-  - ⬜ Remaining: bundled realistic `test`/`test_full` data, `nf-test` tests,
-    MultiQC report config by default, and a green `nf-core lint` gate.
-- ✅ **Stub-run validation.** `nextflow config` confirms the project parses and a
-  `-profile test -stub-run` executes the whole DAG (no data/containers) as the
-  real "does it run" gate.
-  - ⬜ Remaining: `nf-core lint` in the loop and a functional test on real data.
+  - ⬜ Remaining: bundled realistic `test`/`test_full` data, `nf-test` tests, and
+    MultiQC report config by default.
+- ✅ **Stub-run + lint validation.** `nextflow config` confirms the project parses,
+  a `-profile test -stub-run` executes the whole DAG (no data/containers) as the
+  real "does it run" gate, and — when the `nf-core` CLI is available — Hirsh offers
+  to run **`nf-core lint` in the loop**, parsing the pass/warn/fail counts and
+  surfacing the top failures (advisory: a freshly composed project isn't fully
+  green yet). Degrades gracefully when the CLI is missing/unusable
+  (`composition/validate.ts::lintPipeline`, parser unit-tested).
+  - ⬜ Remaining: a functional test on real data, and iterating fixes until lint is
+    green (see Phase 5).
 - ✅ **Custom & non-nf-core tools.** A composed pipeline is no longer limited to the
   catalog. During composition Hirsh can take a scientist's own tool/script and
   generate a standards-compliant `modules/local/<name>/main.nf` — the `meta` map, a

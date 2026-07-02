@@ -47,7 +47,7 @@ import { gatherResults, summarizeResults } from "../results/interpreter.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
-import { stubRun, validateGenerated } from "../composition/validate.js";
+import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
 import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
 import type { ResolvedComposition } from "../composition/types.js";
 import { extractIntent } from "./intentExtraction.js";
@@ -298,7 +298,25 @@ export class Agent {
     }
 
     if (validation.nfCoreCli.available) {
-      this.io.info("nf-core CLI detected — you can also run `nf-core pipelines lint` on the project.");
+      const doLint = await this.io.confirm("Run `nf-core lint` on the generated project now?", true);
+      if (doLint) {
+        const lint = await this.io.withSpinner("Running nf-core lint", () => lintPipeline(result!.dir));
+        if (lint.ran && lint.failed != null) {
+          const line = `nf-core lint: ${lint.passed ?? 0} passed, ${lint.warned ?? 0} warnings, ${lint.failed} failed.`;
+          if (lint.failed === 0) {
+            this.io.say("✓ " + line + " The project is lint-clean.");
+          } else {
+            this.io.warn(line);
+            for (const f of lint.findings.slice(0, 6)) this.io.info("  ✗ " + f);
+            this.io.info(
+              "Some failures are expected for a freshly composed project — iterate toward a full " +
+                "nf-core template before publishing (Phase 5).",
+            );
+          }
+        } else {
+          this.io.warn("Couldn't run nf-core lint: " + (lint.error ?? "unknown error"));
+        }
+      }
     } else if (validation.nfCoreCli.note) {
       this.io.info(validation.nfCoreCli.note);
     }
