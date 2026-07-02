@@ -60,7 +60,7 @@ infrastructure intelligence that defines the north star.
 - ✅ **Ctrl+C forwarding** so Nextflow shuts its jobs/containers down cleanly.
 - ✅ **Test suite** (Vitest) for the pure logic: resource assessment, pair
   inference, command building, config loading.
-- 🔵 Wire `npm test` into CI (GitHub Actions running build + tests).
+- ✅ Wire `npm test` into CI (GitHub Actions running build + tests on push/PR).
 
 ---
 
