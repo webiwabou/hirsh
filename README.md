@@ -334,6 +334,12 @@ public repo is visible and may be indexed/cached even if later deleted. Hirsh
 never publishes without your consent and doesn't handle credentials itself
 (`gh auth login` does).
 
+If you added a **custom tool** as a local module, Hirsh can also write it out in
+the **nf-core/modules layout** (`main.nf`, `meta.yml`, `environment.yml` and an
+`nf-test`) under `contributions/<name>/` and walk you through opening a PR (fork,
+add real test data, run `nf-core modules test`/`lint`, then create the PR).
+Opening the PR stays your call — nf-core acceptance is a community decision.
+
 ## Development
 
 ```bash

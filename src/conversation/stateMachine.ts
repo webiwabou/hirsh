@@ -49,6 +49,7 @@ import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
 import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
+import { writeContribution } from "../composition/contribution.js";
 import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
 import type { ResolvedComposition } from "../composition/types.js";
 import { initAndCommit, isGitAvailable } from "../execution/git.js";
@@ -357,6 +358,10 @@ export class Agent {
     // Phase 5: optional standards-compliant packaging and assisted publishing.
     await this.phasePackaging(result.dir, resolved, validation.nfCoreCli.available);
 
+    // Phase 5: offer to prepare any custom local tools as nf-core/modules
+    // contributions (files + nf-test; the PR stays a human-in-the-loop step).
+    await this.offerContribution(resolved, this.config.execution.workdir);
+
     this.io.say("\nNext steps:");
     this.io.info(`  • Real run: cd ${result.dir} && nextflow run . -profile docker --input samplesheet.csv --outdir results`);
     if (result.referenceParams.length > 0) {
@@ -498,6 +503,43 @@ export class Agent {
       this.io.say(`Published: ${result.url ?? "(repository created)"}`);
     } else {
       this.io.warn("Publishing failed: " + (result.error ?? "unknown error"));
+    }
+  }
+
+  /**
+   * Phase 5 — assisted contribution. For each custom local tool, offers to write
+   * it out in the nf-core/modules layout (main.nf, meta.yml, environment.yml,
+   * nf-test) and guides the PR. Opening the PR stays a deliberate human step —
+   * Hirsh prepares and advises; nf-core acceptance is a community decision.
+   */
+  private async offerContribution(resolved: ResolvedComposition, baseDir: string): Promise<void> {
+    const locals = resolved.localTools ?? [];
+    if (locals.length === 0) return;
+
+    for (const spec of locals) {
+      const yes = await this.io.confirm(
+        `Prepare "${spec.name}" as an nf-core/modules contribution (with an nf-test)?`,
+        false,
+      );
+      if (!yes) continue;
+
+      const res = writeContribution(baseDir, spec);
+      this.io.say(`Wrote an nf-core/modules-style module at ${res.dir}:`);
+      for (const f of res.files) this.io.info("  • " + f);
+
+      this.io.say("To contribute it (you review and run these — acceptance is a community decision):");
+      this.io.info(`  1) Fork nf-core/modules and copy this module into modules/nf-core/${spec.name}/.`);
+      this.io.info(`  2) Add real test inputs, then \`nf-core modules test ${spec.name}\` to make the snapshot.`);
+      this.io.info(`  3) \`nf-core modules lint ${spec.name}\` and iterate until green.`);
+      this.io.info("  4) Open a PR to nf-core/modules (e.g. `gh pr create --repo nf-core/modules --draft`).");
+      this.io.info(
+        "The container/conda, versions and stub are scaffolded — fill in a real version command and test data.",
+      );
+      if (!spec.conda) {
+        this.io.warn(
+          "  No conda dependency set — add one in environment.yml; nf-core requires a conda spec.",
+        );
+      }
     }
   }
 

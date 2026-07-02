@@ -252,9 +252,15 @@ one-off analysis into reusable, community-grade software.
   - ⬜ Remaining: generated `nf-test` tests and full-size `test`/`test_full` data.
 - 🔵 **Local quality gate.** `nf-core lint` runs in the composition loop and after
   packaging (Phase 4); iterating fixes automatically until green is still to do.
-- ⬜ **Assisted contribution.** Draft a module/subworkflow proposal and open a PR to
-  nf-core/modules (or the relevant pipeline) — always with explicit human review
-  and consent before anything is published.
+- 🔵 **Assisted contribution.** For a custom local tool, Hirsh writes it out in the
+  nf-core/modules layout — `main.nf` (no generator comment), `meta.yml`,
+  `environment.yml` (conda) and an `nf-test` stub test with the right tags — under
+  `contributions/<name>/`, then guides the PR (fork, add real test data, run
+  `nf-core modules test`/`lint`, open the PR). Opening the PR stays a deliberate
+  human step, and Hirsh is explicit that nf-core acceptance is a community decision
+  (`composition/contribution.ts`, unit-tested).
+  - ⬜ Remaining: automate the fork+branch+draft-PR via `gh` (with consent), and
+    generate the nf-test snapshot from real bundled test data.
 - ✅ **Publish a whole pipeline.** With explicit, double confirmation and defaulting
   to **private**, Hirsh creates and pushes a GitHub repository via the `gh` CLI
   (`execution/publish.ts`). It warns plainly that a public repo is visible and may
