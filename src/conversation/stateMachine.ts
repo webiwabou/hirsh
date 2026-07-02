@@ -6,7 +6,7 @@
  * at each step (queried by /status).
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
@@ -22,6 +22,7 @@ import {
   chooseExecutor,
   describeExecutor,
 } from "../execution/executor.js";
+import { negotiateInfrastructure } from "../execution/negotiation.js";
 import { runNextflow } from "../execution/runner.js";
 import {
   assessResources,
@@ -357,35 +358,108 @@ export class Agent {
       return true;
     }
 
-    if (assessment.verdict === "adapt") {
-      this.io.warn(assessment.message);
-      const caps = assessment.caps!;
-      const adapt = await this.io.confirm(
-        `Cap Nextflow to ${caps.maxMemory} / ${caps.maxCpus} CPUs and continue?`,
-        true,
-      );
-      if (!adapt) {
-        this.io.info("Understood — not adapting. You can run this on a larger machine instead.");
-        return false;
-      }
-      session.paramValues.max_memory = caps.maxMemory;
-      session.paramValues.max_cpus = caps.maxCpus;
-      finalizeCommand(session, pipeline, this.config);
-      this.io.info(`Capped the run to ${caps.maxMemory} and ${caps.maxCpus} CPUs.`);
-      return true;
-    }
-
-    // refuse
+    // adapt / refuse → negotiate infrastructure: present concrete alternatives
+    // (cap locally, HPC cluster, cloud) with rough feasibility/time/cost.
     this.io.warn(assessment.message);
-    const override = await this.io.confirm(
-      "Run anyway against my recommendation (it will very likely fail)?",
-      false,
-    );
-    if (!override) return false;
-    session.paramValues.max_memory = formatMemoryGB(available.memoryGB);
-    session.paramValues.max_cpus = available.cpus;
-    finalizeCommand(session, pipeline, this.config);
-    return true;
+    return this.negotiate(session, pipeline, assessment, available);
+  }
+
+  /**
+   * Presents infrastructure alternatives with rough feasibility/time/cost and a
+   * recommendation, then carries out the user's choice (cap locally, move to a
+   * cluster/cloud executor, or stop). Returns true if the run should proceed.
+   */
+  private async negotiate(
+    session: Session,
+    pipeline: PipelineDefinition,
+    assessment: ReturnType<typeof assessResources>,
+    available: MachineResources,
+  ): Promise<boolean> {
+    const requiredMemoryGB = this.requiredMemory(pipeline, assessment);
+    const result = negotiateInfrastructure({
+      verdict: assessment.verdict === "adapt" ? "adapt" : "refuse",
+      availableMemoryGB: available.memoryGB,
+      requiredMemoryGB,
+      limitingStep: assessment.limitingStep,
+    });
+
+    this.io.say(result.summary);
+    result.options.forEach((opt, i) => {
+      const rec = i === result.recommendedIndex ? " (recommended)" : "";
+      const marks = [
+        `feasibility: ${opt.feasibility}`,
+        opt.time ? `time: ${opt.time}` : "",
+        opt.cost ? `cost: ${opt.cost}` : "",
+      ].filter(Boolean);
+      this.io.say(`  ${i + 1}) ${opt.label}${rec}`);
+      this.io.info(`       ${opt.detail}`);
+      this.io.info(`       ${marks.join(" · ")}`);
+    });
+
+    const def = result.recommendedIndex + 1;
+    const answer = (await this.io.ask(`Which path? [${def}]`)).trim();
+    let idx = result.recommendedIndex;
+    if (answer !== "") {
+      const n = Number.parseInt(answer, 10);
+      if (Number.isInteger(n) && n >= 1 && n <= result.options.length) idx = n - 1;
+    }
+    const choice = result.options[idx];
+
+    switch (choice.kind) {
+      case "cap-local": {
+        if (choice.feasibility === "infeasible") {
+          this.io.warn(
+            "Capping locally can't satisfy a hard memory floor, so it will very likely fail.",
+          );
+          const override = await this.io.confirm("Run anyway against my recommendation?", false);
+          if (!override) return false;
+        }
+        const caps = assessment.caps ?? {
+          maxMemory: formatMemoryGB(available.memoryGB),
+          maxCpus: available.cpus,
+        };
+        session.paramValues.max_memory = caps.maxMemory;
+        session.paramValues.max_cpus = caps.maxCpus;
+        finalizeCommand(session, pipeline, this.config);
+        this.io.info(`Capped the run to ${caps.maxMemory} and ${caps.maxCpus} CPUs.`);
+        return true;
+      }
+      case "cluster":
+      case "cloud": {
+        // Re-run executor selection so the user picks the scheduler/cloud target
+        // and its queue; the command is rebuilt and the local gate no longer
+        // applies.
+        this.io.info(
+          choice.kind === "cluster"
+            ? "Let's point this at your cluster."
+            : "Let's set up the cloud target.",
+        );
+        await this.phaseExecutor(session, session.runDir ?? resolve(this.config.execution.workdir));
+        finalizeCommand(session, pipeline, this.config);
+        if (!session.executor || session.executor.executor === "local") {
+          this.io.warn("Still set to local — the memory limit above still applies.");
+          return this.negotiate(session, pipeline, assessment, available);
+        }
+        return true;
+      }
+      default:
+        this.io.info("Okay — not running. The command and inputs stay prepared.");
+        return false;
+    }
+  }
+
+  /** Memory the run really wants: peak active step, or the whole-pipeline hint. */
+  private requiredMemory(
+    pipeline: PipelineDefinition,
+    assessment: ReturnType<typeof assessResources>,
+  ): number {
+    const processes = pipeline.resources?.processes;
+    if (processes && processes.length > 0) {
+      const skipped = new Set(assessment.skippedSteps ?? []);
+      const active = processes.filter((p) => !skipped.has(p.name));
+      if (active.length > 0) return Math.max(...active.map((p) => p.memoryGB));
+    }
+    return pipeline.resources?.recommendedMemoryGB ?? assessment.available.memoryGB;
   }
 
   /**

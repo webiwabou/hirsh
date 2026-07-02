@@ -142,10 +142,15 @@ the heart of the "no technical knowledge required" promise.
   unit-tested).
   - ⬜ Remaining: reuse existing nf-core/configs institutional profiles when the
     scientist names their cluster; Azure/GCP; per-executor account/credential checks.
-- ⬜ **Infrastructure negotiation.** When the local machine can't do it, Hirsh
-  proposes concrete alternatives: cap and run slower, move to an available cluster
-  queue, or provision/burst to cloud — with an **estimated time, cost, and
-  feasibility** for each, and a clear recommendation.
+- ✅ **Infrastructure negotiation.** When the local machine can't run a pipeline
+  comfortably, Hirsh no longer just refuses: it presents concrete alternatives —
+  cap and run slower here, move to an HPC cluster, or burst to AWS Batch — each
+  with a rough **feasibility, time and cost** (e.g. "~$0.49/hour for a ≥38 GB
+  node") and a clear recommendation, then carries out the choice (applying caps or
+  re-pointing the executor). Estimates are deliberately rough and labeled as such
+  (`execution/negotiation.ts`, unit-tested).
+  - ⬜ Remaining: detect actual cluster availability/queues, real runtime estimates
+    from prior runs, and live cloud pricing instead of a nominal rate.
 - ⬜ **Container & data staging.** Manage image pulls (Docker/Singularity/Apptainer),
   cache locations, and staging of large inputs; detect and explain disk pressure.
 - 🔵 **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
@@ -265,7 +270,7 @@ The full realization: a scientific collaborator, not a command builder.
 - ⬜ Understands biological intent without the tool being named
 - ✅ Selects the right existing pipeline
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
-- ⬜ Negotiates compute (adapt / relocate / provision) with cost & time estimates
+- 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
 - 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
 - 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
 - ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools

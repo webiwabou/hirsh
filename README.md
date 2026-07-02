@@ -247,6 +247,13 @@ BWA-MEM2 genome indexing, which can't be reduced. So instead of a vague "maybe",
 you get "the genome-indexing step needs ~38 GB and can't be capped; this machine
 has 30 GB".
 
+When the machine falls short, Hirsh **negotiates infrastructure**: instead of a
+flat refusal it lays out concrete alternatives — cap and run slower here, move to
+an HPC cluster, or burst to AWS Batch — each with a rough feasibility, time and
+cost (e.g. "~$0.49/hour for a ≥38 GB node") and a recommendation, then applies
+your choice (setting caps or re-pointing the executor). The estimates are rough
+and labeled as such.
+
 The test profile skips this check (it uses tiny bundled data).
 
 ## Where it runs (executor)
