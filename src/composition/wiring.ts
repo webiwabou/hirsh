@@ -89,9 +89,10 @@ export function buildWorkflow(
   modules: NfCoreModule[],
 ): WiringResult {
   const wf = `HIRSH_${plan.pipelineName.toUpperCase()}`;
-  const includes = modules.map(
-    (m) => `include { ${processName(m.name)} } from '../modules/nf-core/${m.name}/main'`,
-  );
+  const includes = modules.map((m) => {
+    const dir = m.local ? "local" : "nf-core";
+    return `include { ${processName(m.name)} } from '../modules/${dir}/${m.name}/main'`;
+  });
 
   const env = new Map<string, EnvEntry>();
   env.set("reads", { expr: "ch_input", meta: true });

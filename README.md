@@ -285,6 +285,11 @@ step), Hirsh builds one from real [nf-core/modules](https://github.com/nf-core/m
    (~1,900 modules) for candidates matching your intent.
 2. The LLM proposes an ordered chain of real modules, each with a rationale, for
    you to review.
+2b. You can also add **your own (non-nf-core) tools** as `modules/local/` — Hirsh
+   generates a standards-compliant module for each (the `meta` map, a
+   container/conda directive, `versions.yml`, a `when:` guard and a `stub:` block)
+   and wires it in exactly like an nf-core module, mixing `modules/nf-core/` and
+   `modules/local/` as real nf-core pipelines do.
 3. On confirmation it generates a **pinned, nf-core-structured project** under
    your `workdir` with **channel-type-matched wiring**: the selected modules
    installed from the pinned commit, a `modules.json` pinning each module's git

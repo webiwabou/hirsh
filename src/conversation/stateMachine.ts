@@ -48,6 +48,8 @@ import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
 import { stubRun, validateGenerated } from "../composition/validate.js";
+import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
+import type { ResolvedComposition } from "../composition/types.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand } from "./parameterFilling.js";
 import { selectPipeline } from "./pipelineSelection.js";
@@ -243,6 +245,10 @@ export class Agent {
     resolved.plan.steps.forEach((s, i) => this.io.say(`  ${i + 1}. ${s.module} — ${s.rationale}`));
     this.io.info(`Modules pinned to nf-core/modules @ ${resolved.sha.slice(0, 10)}`);
 
+    // Phase 4: let the scientist add custom (non-nf-core) tools as local modules,
+    // wired in like any nf-core module.
+    await this.addLocalTools(resolved);
+
     const go = await this.io.confirm("Generate this pipeline project?", true);
     if (!go) {
       this.io.info("Not generating anything. You can refine the request and try again.");
@@ -303,6 +309,37 @@ export class Agent {
       this.io.info("  • Provide the reference parameters above for real data.");
     }
     this.io.info("  • The test profile uses placeholder data for the stub run; swap in real test data for a functional test.");
+  }
+
+  /**
+   * Phase 4 — optionally add custom (non-nf-core) tools as local modules. Each is
+   * synthesized as a standards-compliant modules/local/<name> and appended to the
+   * composition so it wires in like any nf-core module.
+   */
+  private async addLocalTools(resolved: ResolvedComposition): Promise<void> {
+    let add = await this.io.confirm(
+      "Add a custom (non-nf-core) tool of your own as a local module?",
+      false,
+    );
+    while (add) {
+      const spec = await collectLocalTool(this.io);
+      if (spec) {
+        if (resolved.modules.some((m) => m.name === spec.name)) {
+          this.io.warn(`A module named "${spec.name}" is already in the plan; skipping.`);
+        } else {
+          resolved.modules.push(toNfCoreModule(spec));
+          resolved.localTools = [...(resolved.localTools ?? []), spec];
+          resolved.plan.steps.push({
+            module: spec.name,
+            rationale: `Custom local tool: ${spec.description}`,
+          });
+          this.io.info(
+            `Added local module "${spec.name}" (${spec.container ?? spec.conda ?? "no environment set"}).`,
+          );
+        }
+      }
+      add = await this.io.confirm("Add another custom tool?", false);
+    }
   }
 
   /** Computes the usable resource budget: detected machine, capped by config. */

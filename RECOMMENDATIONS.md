@@ -216,13 +216,16 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   `-profile test -stub-run` executes the whole DAG (no data/containers) as the
   real "does it run" gate.
   - ⬜ Remaining: `nf-core lint` in the loop and a functional test on real data.
-- ⬜ **Custom & non-nf-core tools.** A composed pipeline should not be limited to
-  what already exists in the catalog. Let Hirsh generate standards-compliant
-  `modules/local/` processes that wrap the scientist's own tools/scripts (container
-  or conda directive, the `meta` map, `versions.yml`, a `stub:` block) and wire them
-  like any other module — mixing `modules/nf-core/` with `modules/local/` exactly as
-  real nf-core pipelines do. This is what makes "compose a genuinely new pipeline"
-  real when part of the toolchain isn't in nf-core.
+- ✅ **Custom & non-nf-core tools.** A composed pipeline is no longer limited to the
+  catalog. During composition Hirsh can take a scientist's own tool/script and
+  generate a standards-compliant `modules/local/<name>/main.nf` — the `meta` map, a
+  container/conda directive, `versions.yml`, a `when:` guard and a `stub:` block —
+  then wire it into the workflow like any nf-core module (mixing `modules/nf-core/`
+  with `modules/local/`, as real nf-core pipelines do). Verified end-to-end: a
+  pipeline with a generated local module executes via `-profile test -stub-run` with
+  no edits (`composition/localModule.ts`, unit-tested).
+  - ⬜ Remaining: let the LLM *propose* local tools from intent (today they're
+    gathered interactively), multi-input local modules, and per-tool test data.
 
 ## Phase 5 — Contributing back to the community
 
@@ -284,7 +287,7 @@ The full realization: a scientific collaborator, not a command builder.
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
 - 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
 - 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
-- ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools
+- ✅ Composes pipelines that mix nf-core modules with the scientist's own tools (generated modules/local/ + nf-core, runs via stub)
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
 - ⬜ Contributes novel, standards-compliant modules and pipelines back to nf-core

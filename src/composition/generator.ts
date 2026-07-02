@@ -18,6 +18,7 @@ import { join, resolve } from "node:path";
 import type { ModuleRegistry } from "../modules/registry.js";
 import type { NfCoreModule } from "../modules/types.js";
 import type { CompositionPlan, ResolvedComposition } from "./types.js";
+import { renderLocalMeta, renderLocalModuleMain, type LocalToolSpec } from "./localModule.js";
 import { buildWorkflow } from "./wiring.js";
 
 export interface GenerationResult {
@@ -121,10 +122,11 @@ function renderModulesJson(plan: CompositionPlan, modules: NfCoreModule[], sha: 
   return JSON.stringify(doc, null, 4) + "\n";
 }
 
-function renderCitations(modules: NfCoreModule[]): string {
+function renderCitations(modules: NfCoreModule[], localTools: LocalToolSpec[]): string {
   const lines = ["# Citations", "", "## Tools used by this pipeline", ""];
   const seen = new Set<string>();
   for (const m of modules) {
+    if (m.local) continue;
     for (const t of m.tools) {
       if (seen.has(t.name)) continue;
       seen.add(t.name);
@@ -133,7 +135,13 @@ function renderCitations(modules: NfCoreModule[]): string {
       lines.push(`- **${t.name}**${link}${doi}`);
     }
   }
-  lines.push("", "Modules sourced from [nf-core/modules](https://github.com/nf-core/modules).", "");
+  if (localTools.length > 0) {
+    lines.push("", "## Custom (local) tools", "");
+    for (const t of localTools) {
+      lines.push(`- **${t.toolName}** — ${t.description} (local module, not from nf-core)`);
+    }
+  }
+  lines.push("", "nf-core modules sourced from [nf-core/modules](https://github.com/nf-core/modules).", "");
   return lines.join("\n");
 }
 
@@ -234,6 +242,9 @@ export async function generatePipeline(
   baseDir: string,
 ): Promise<GenerationResult> {
   const { plan, modules, sha } = resolved;
+  const localTools = resolved.localTools ?? [];
+  const nfcoreModules = modules.filter((m) => !m.local);
+  const localModules = modules.filter((m) => m.local);
   const dir = resolve(baseDir, plan.pipelineName);
   const warnings: string[] = [];
   const files: string[] = [];
@@ -247,8 +258,8 @@ export async function generatePipeline(
 
   mkdirSync(dir, { recursive: true });
 
-  // Install each module from the pinned commit (main.nf required; others best-effort).
-  for (const mod of modules) {
+  // Install each nf-core module from the pinned commit (main.nf required).
+  for (const mod of nfcoreModules) {
     const modDir = `modules/nf-core/${mod.name}`;
     try {
       write(`${modDir}/main.nf`, await registry.fetchModuleFile(mod.name, "main.nf"));
@@ -264,6 +275,17 @@ export async function generatePipeline(
     }
   }
 
+  // Synthesize each local (custom) module — main.nf + meta.yml — from its spec.
+  for (const mod of localModules) {
+    const spec = localTools.find((t) => t.name === mod.name);
+    if (!spec) {
+      warnings.push(`No spec for local module ${mod.name}; skipped.`);
+      continue;
+    }
+    write(`modules/local/${mod.name}/main.nf`, renderLocalModuleMain(spec));
+    write(`modules/local/${mod.name}/meta.yml`, renderLocalMeta(spec));
+  }
+
   const wiring = buildWorkflow(plan, modules);
 
   write("main.nf", renderMainNf(plan));
@@ -271,9 +293,9 @@ export async function generatePipeline(
   write("nextflow.config", renderNextflowConfig(plan, wiring.referenceParams));
   write("conf/test.config", renderTestConfig(wiring.referenceParams));
   write("nextflow_schema.json", renderPipelineSchema(plan, wiring.referenceParams));
-  write("modules.json", renderModulesJson(plan, modules, sha));
+  write("modules.json", renderModulesJson(plan, nfcoreModules, sha));
   write("assets/schema_input.json", renderInputSchema());
-  write("CITATIONS.md", renderCitations(modules));
+  write("CITATIONS.md", renderCitations(modules, localTools));
   write("README.md", renderReadme(plan, modules, wiring.referenceParams));
   write(".nf-core.yml", renderNfCoreYml());
 

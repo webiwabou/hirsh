@@ -44,6 +44,8 @@ export interface NfCoreModule {
   tools: ModuleTool[];
   inputs: ModuleInputChannel[];
   outputs: ModuleOutputChannel[];
+  /** True for a Hirsh-generated local module (modules/local/…), not from nf-core. */
+  local?: boolean;
 }
 
 /** The Nextflow process name a module exposes, e.g. "samtools/sort" → SAMTOOLS_SORT. */
