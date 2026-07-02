@@ -40,6 +40,7 @@ src/
 ├── execution/
 │   ├── envCheck.ts   verifies nextflow + the chosen backend (docker/singularity/conda/mamba) on PATH
 │   ├── environment.ts  detects backends, interactive selection, Nextflow bootstrap (Phase 3)
+│   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
 │   ├── resources.ts  machine detection + whole-pipeline and per-process memory assessment (ok/adapt/refuse)
 │   ├── samplesheet.ts  FASTQ scanning, pair inference, CSV writing
 │   └── runner.ts     spawns `nextflow`, streams stdout/stderr, forwards SIGINT

@@ -1,6 +1,7 @@
 /** Conversational session state (in memory; no persistence in Phase 1). */
 import type { PipelineDefinition } from "../pipelines/types.js";
 import type { ContainerEngine } from "../config/types.js";
+import type { ExecutorSettings } from "../execution/executor.js";
 
 export type Phase =
   | "intent" // Phase A — understand the intent
@@ -53,6 +54,10 @@ export interface Session {
   paramsFile?: string;
   /** Execution backend chosen interactively (overrides the configured one). */
   engine?: ContainerEngine;
+  /** Executor (where jobs run) chosen interactively. */
+  executor?: ExecutorSettings;
+  /** Path to the generated executor `-c` config, when not local. */
+  executorConfigPath?: string;
 }
 
 export function createSession(): Session {

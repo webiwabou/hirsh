@@ -44,6 +44,7 @@ const DEFAULT_ANTHROPIC: AnthropicConfig = {
 
 const DEFAULT_EXECUTION: ExecutionConfig = {
   containerEngine: "docker",
+  executor: "local",
   workdir: "./runs",
 };
 
@@ -156,8 +157,18 @@ function mergeExecution(value: unknown): ExecutionConfig {
         `Use one of: ${validEngines.join(", ")}.`,
     );
   }
+  const executor = value.executor;
+  const validExecutors = ["local", "slurm", "sge", "lsf", "pbs", "awsbatch"];
+  if (executor !== undefined && !validExecutors.includes(executor as string)) {
+    throw new ConfigError(
+      `Invalid execution.executor: "${String(executor)}". ` +
+        `Use one of: ${validExecutors.join(", ")}.`,
+    );
+  }
   return {
     containerEngine: (engine as ExecutionConfig["containerEngine"]) ?? DEFAULT_EXECUTION.containerEngine,
+    executor: (executor as ExecutionConfig["executor"]) ?? DEFAULT_EXECUTION.executor,
+    queue: typeof value.queue === "string" ? value.queue : undefined,
     workdir: typeof value.workdir === "string" ? value.workdir : DEFAULT_EXECUTION.workdir,
     maxCpus: typeof value.maxCpus === "number" ? value.maxCpus : undefined,
     maxMemory: typeof value.maxMemory === "string" ? value.maxMemory : undefined,

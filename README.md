@@ -108,6 +108,9 @@ ollama:
 execution:
   containerEngine: docker   # default backend: docker | singularity | conda | mamba
                             # (you can switch interactively before each run)
+  executor: local           # where jobs run: local | slurm | sge | lsf | pbs | awsbatch
+                            # (you also pick this interactively before each run)
+  # queue: short            # default queue/partition for cluster executors
   workdir: ./runs
   # Optional resource caps for real runs (nf-core --max_memory / --max_cpus).
   # If unset, Hirsh uses the detected machine as the budget.
@@ -245,6 +248,17 @@ you get "the genome-indexing step needs ~38 GB and can't be capped; this machine
 has 30 GB".
 
 The test profile skips this check (it uses tiny bundled data).
+
+## Where it runs (executor)
+
+Before a real run Hirsh asks *where* to run: the **local machine**, an **HPC
+scheduler** (Slurm, SGE, LSF, PBS) or **AWS Batch**. It writes a small Nextflow
+config selecting the executor (queue, and region/S3 work directory for AWS Batch)
+and passes it with `-c`, so it works with any pipeline without needing a matching
+nf-core institutional profile. On a cluster/cloud executor the local-memory check
+is skipped — the scheduler sizes each job — and the chosen target is recorded in
+the run's provenance. Set a default with `execution.executor` (and
+`execution.queue`) in the config.
 
 ## Composing a pipeline from nf-core modules
 

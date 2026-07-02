@@ -335,13 +335,14 @@ export function buildRunArgs(
   useTestProfile: boolean,
   paramsFilePath: string,
   engine?: ContainerEngine,
+  extraConfigs: string[] = [],
 ): string[] {
   const profiles: string[] = [];
   if (useTestProfile && pipeline.profiles.testProfile) {
     profiles.push(pipeline.profiles.testProfile);
   }
   profiles.push(engine ?? config.execution.containerEngine);
-  return [
+  const args = [
     "run",
     pipeline.name,
     "-r",
@@ -351,6 +352,10 @@ export function buildRunArgs(
     "-params-file",
     paramsFilePath,
   ];
+  for (const cfg of extraConfigs) {
+    args.push("-c", cfg);
+  }
+  return args;
 }
 
 /**
@@ -368,5 +373,13 @@ export function finalizeCommand(
   const obj = buildParamsObject(session, config);
   writeFileSync(paramsPath, stringifyYaml(obj), "utf8");
   session.paramsFile = paramsPath;
-  session.command = buildRunArgs(pipeline, config, session.useTestProfile, paramsPath, session.engine);
+  const extraConfigs = session.executorConfigPath ? [session.executorConfigPath] : [];
+  session.command = buildRunArgs(
+    pipeline,
+    config,
+    session.useTestProfile,
+    paramsPath,
+    session.engine,
+    extraConfigs,
+  );
 }

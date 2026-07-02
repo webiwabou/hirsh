@@ -25,6 +25,8 @@ export interface RunManifest {
   environment: {
     nextflow?: string;
     containerEngine: string;
+    /** Where jobs ran (local machine / HPC scheduler / cloud). */
+    executor: string;
     os: string;
     arch: string;
     cpus: number;
@@ -46,6 +48,8 @@ export interface ManifestInput {
   outdir?: string;
   nextflowVersion?: string;
   containerEngine: string;
+  /** Human description of where jobs ran; defaults to "local machine". */
+  executor?: string;
   machine: MachineResources;
   llmLabel: string;
   executed: boolean;
@@ -68,6 +72,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
     environment: {
       nextflow: input.nextflowVersion,
       containerEngine: input.containerEngine,
+      executor: input.executor ?? "local machine",
       os: process.platform,
       arch: process.arch,
       cpus: input.machine.cpus,
@@ -116,6 +121,7 @@ ${paramLines || "- (none)"}
 ## Environment
 - **Nextflow:** ${m.environment.nextflow ?? "—"}
 - **Container engine:** ${m.environment.containerEngine}
+- **Executor:** ${m.environment.executor}
 - **Machine:** ${m.environment.cpus} CPUs, ${m.environment.memoryGB} GB RAM, ${m.environment.os}/${m.environment.arch}
 - **LLM:** ${m.llm}
 

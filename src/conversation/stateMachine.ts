@@ -5,7 +5,8 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
@@ -16,6 +17,11 @@ import {
   chooseBackend,
   detectBackends,
 } from "../execution/environment.js";
+import {
+  buildExecutorConfig,
+  chooseExecutor,
+  describeExecutor,
+} from "../execution/executor.js";
 import { runNextflow } from "../execution/runner.js";
 import {
   assessResources,
@@ -306,6 +312,17 @@ export class Agent {
   private async phaseResourceCheck(session: Session, pipeline: PipelineDefinition): Promise<boolean> {
     if (session.useTestProfile || !pipeline.resources) return true;
 
+    // On a cluster/cloud executor the local machine's RAM isn't the constraint —
+    // each job runs on a scheduler node. Skip the local budget gate and let the
+    // pipeline's per-process resource labels govern node sizing.
+    if (session.executor && session.executor.executor !== "local") {
+      this.io.info(
+        `Jobs will run on ${describeExecutor(session.executor)}, so I'm not gating on this ` +
+          "machine's memory; the scheduler allocates each step's resources.",
+      );
+      return true;
+    }
+
     const available = this.availableBudget();
     // Params the user actually provided (non-empty) — a prebuilt index/reference
     // lets the model skip the corresponding indexing step's memory floor.
@@ -393,6 +410,32 @@ export class Agent {
     }
   }
 
+  /**
+   * Phase 3 — choose where jobs run (local / HPC scheduler / cloud). Writes a
+   * Nextflow `-c` config selecting the executor and records it on the session.
+   */
+  private async phaseExecutor(session: Session, runDir: string): Promise<void> {
+    const configured = this.config.execution.executor ?? "local";
+    const settings = await chooseExecutor(this.io, configured, this.config.execution.queue);
+    session.executor = settings;
+
+    const configText = buildExecutorConfig(settings);
+    if (configText) {
+      const path = join(runDir, "executor.config");
+      try {
+        writeFileSync(path, configText, "utf8");
+        session.executorConfigPath = path;
+      } catch {
+        this.io.warn("Could not write the executor config; falling back to local execution.");
+        session.executor = { executor: "local" };
+        session.executorConfigPath = undefined;
+      }
+    } else {
+      session.executorConfigPath = undefined;
+    }
+    this.io.info(`Execution target: ${describeExecutor(session.executor)}.`);
+  }
+
   /** Phase D — show the command, check the environment and run after confirmation. */
   private async phaseConfirmAndRun(session: Session, runDir: string): Promise<boolean> {
     session.phase = "confirm";
@@ -400,10 +443,12 @@ export class Agent {
 
     const pipeline = session.selectedPipeline!;
 
-    // Phase 3: decide the execution backend (Docker/Singularity/Conda/Mamba)
-    // interactively, based on what's actually available, before building the
-    // command so the -profile reflects the choice.
+    // Phase 3: decide the execution backend (Docker/Singularity/Conda/Mamba) and
+    // the executor (where jobs run) interactively, then rebuild the command so
+    // its -profile and -c reflect both choices.
     await this.phaseEnvironment(session);
+    await this.phaseExecutor(session, runDir);
+    finalizeCommand(session, pipeline, this.config);
 
     const proceed = await this.phaseResourceCheck(session, pipeline);
     if (!proceed) return false;
@@ -494,6 +539,7 @@ export class Agent {
         outdir: session.outdir,
         nextflowVersion: env.nextflow.version,
         containerEngine: session.engine ?? this.config.execution.containerEngine,
+        executor: session.executor ? describeExecutor(session.executor) : "local machine",
         machine: detectMachine(),
         llmLabel: this.provider.label,
         executed,

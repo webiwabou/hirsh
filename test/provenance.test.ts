@@ -27,7 +27,14 @@ describe("buildManifest", () => {
     expect(m.command).toBe("nextflow run nf-core/rnaseq -r 3.14.0 -profile test,docker -params-file params.yaml");
     expect(m.environment.containerEngine).toBe("docker");
     expect(m.environment.cpus).toBe(8);
+    expect(m.environment.executor).toBe("local machine");
     expect(m.execution).toEqual({ executed: true, exitCode: 0 });
+  });
+
+  it("records a non-local executor when provided", () => {
+    const m = buildManifest({ ...input, executor: "Slurm, queue \"short\"" });
+    expect(m.environment.executor).toBe('Slurm, queue "short"');
+    expect(renderProvenanceMarkdown(m)).toContain("Slurm");
   });
 });
 

@@ -40,6 +40,7 @@ function statusText(session: Session, config: HirshConfig, provider: LLMProvider
     `  Phase: ${PHASE_LABEL[session.phase]}`,
     `  LLM provider: ${provider.label}`,
     `  Container engine: ${config.execution.containerEngine}`,
+    `  Executor: ${config.execution.executor ?? "local"}`,
     "  Context:",
     `    Organism: ${q.organism ?? "—"}`,
     `    Data type: ${q.dataType ?? "—"}`,

@@ -22,8 +22,18 @@ export interface AnthropicConfig {
   maxTokens: number;
 }
 
+/**
+ * Where Nextflow submits jobs. "local" runs on this machine; the others hand
+ * scheduling to an HPC scheduler or the cloud via the matching Nextflow executor.
+ */
+export type ExecutorName = "local" | "slurm" | "sge" | "lsf" | "pbs" | "awsbatch";
+
 export interface ExecutionConfig {
   containerEngine: ContainerEngine;
+  /** Job scheduler / execution backend. Defaults to "local". */
+  executor?: ExecutorName;
+  /** Default queue/partition for cluster executors. */
+  queue?: string;
   /** Base directory where pipelines are launched. */
   workdir: string;
   /** Optional CPU cap for runs (overrides detected machine as the budget). */

@@ -132,9 +132,16 @@ the heart of the "no technical knowledge required" promise.
   index but is *fine* when `--genome`/a STAR index is provided.
   - ⬜ Remaining: read real per-process peaks from Nextflow trace/execution reports
     instead of curated estimates.
-- ⬜ **Executor abstraction.** Run locally, on HPC schedulers (Slurm/SGE) or in the
-  cloud (AWS Batch, Azure, GCP) by choosing profiles and executors — the scientist
-  just says "run it on the cluster".
+- ✅ **Executor abstraction.** Before a run Hirsh asks *where* to run — local
+  machine, an HPC scheduler (Slurm/SGE/LSF/PBS) or AWS Batch — and writes a small
+  Nextflow `-c` config that sets `process.executor` (+ queue, and region/S3 work
+  dir for AWS Batch), passed on the command line. This works with any pipeline
+  without depending on a matching nf-core institutional profile. On a non-local
+  executor the local-memory pre-flight is skipped (the scheduler sizes each job),
+  and the chosen target is recorded in provenance (`execution/executor.ts`,
+  unit-tested).
+  - ⬜ Remaining: reuse existing nf-core/configs institutional profiles when the
+    scientist names their cluster; Azure/GCP; per-executor account/credential checks.
 - ⬜ **Infrastructure negotiation.** When the local machine can't do it, Hirsh
   proposes concrete alternatives: cap and run slower, move to an available cluster
   queue, or provision/burst to cloud — with an **estimated time, cost, and
@@ -260,7 +267,7 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - ⬜ Negotiates compute (adapt / relocate / provision) with cost & time estimates
 - 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
-- ⬜ Runs on laptop, HPC and cloud transparently
+- 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
 - ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)

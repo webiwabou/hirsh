@@ -72,4 +72,15 @@ describe("buildRunArgs", () => {
     expect(args).toContain("-profile");
     expect(args[args.indexOf("-profile") + 1]).toBe("docker");
   });
+
+  it("uses the chosen engine and appends executor -c configs", () => {
+    const rnaseq = findPipeline("nf-core/rnaseq")!;
+    const args = buildRunArgs(rnaseq, baseConfig, false, "/run/params.yaml", "singularity", [
+      "/run/executor.config",
+    ]);
+    expect(args[args.indexOf("-profile") + 1]).toBe("singularity");
+    const cIdx = args.indexOf("-c");
+    expect(cIdx).toBeGreaterThan(-1);
+    expect(args[cIdx + 1]).toBe("/run/executor.config");
+  });
 });
