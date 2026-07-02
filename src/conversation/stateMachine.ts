@@ -66,7 +66,7 @@ import type { ResolvedComposition } from "../composition/types.js";
 import { initAndCommit, isGitAvailable } from "../execution/git.js";
 import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
-import { fillParameters, finalizeCommand } from "./parameterFilling.js";
+import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
 import { selectPipeline } from "./pipelineSelection.js";
 import type { AgentIO } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
@@ -127,7 +127,13 @@ export class Agent {
 
     session.phase = "params";
     this.io.heading("Phase C · Parameterization");
-    const { runDir } = await fillParameters(this.io, session, pipeline, this.config);
+    const { runDir } = await fillParameters(
+      this.io,
+      session,
+      pipeline,
+      this.config,
+      this.memorySuggestions(session.query),
+    );
 
     let executed = await this.phaseConfirmAndRun(session, runDir);
     if (executed) {
@@ -582,6 +588,21 @@ export class Agent {
       );
       if (r.outdir) this.io.info(`      results: ${r.outdir}`);
     }
+  }
+
+  /** Collects remembered references/samplesheets from relevant past runs. */
+  private memorySuggestions(query: QueryContext): MemorySuggestions {
+    if (!this.config.memory.enabled) return { references: {}, samplesheets: [] };
+    const references: Record<string, string[]> = {};
+    const samplesheets: string[] = [];
+    for (const r of relevantRuns(this.mem(), query, 5)) {
+      for (const [k, v] of Object.entries(r.references ?? {})) {
+        const list = (references[k] ??= []);
+        if (!list.includes(v)) list.push(v);
+      }
+      if (r.samplesheet && !samplesheets.includes(r.samplesheet)) samplesheets.push(r.samplesheet);
+    }
+    return { references, samplesheets };
   }
 
   /** Records a run into project memory (best-effort; never blocks). */

@@ -284,11 +284,13 @@ The full realization: a scientific collaborator, not a command builder.
   (organism/data/objective), references used, outdir and status. When a new request
   resembles a past one it surfaces the relevant history ("similar past analyses:
   …"), so it behaves like a collaborator that remembers rather than a command
-  builder that forgets. Enabled by default, disable with `memory.enabled: false`
-  (`memory/store.ts`, unit-tested; persistence verified round-trip).
-  - ⬜ Remaining: offer to reuse a remembered reference/samplesheet during
-    parameterization, remember backend/executor preferences, and a first-run
-    consent prompt.
+  builder that forgets. During parameterization it also **offers to reuse a
+  remembered reference** (genome/FASTA/GTF) or **samplesheet** from a relevant past
+  run, so you don't re-enter them. Enabled by default, disable with
+  `memory.enabled: false` (`memory/store.ts` + Phase C reuse, unit-tested;
+  persistence verified round-trip).
+  - ⬜ Remaining: remember backend/executor preferences, and a first-run consent
+    prompt.
 - ⬜ **Scientific dialogue.** Discuss experimental design, suggest appropriate
   analyses and controls, flag confounders and batch effects, and reason about the
   results' biological meaning.

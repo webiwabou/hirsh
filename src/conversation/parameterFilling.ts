@@ -12,7 +12,7 @@
  * On completion it leaves on the session: useTestProfile, outdir, paramValues,
  * samplesheetPath and command.
  */
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, HirshConfig } from "../config/types.js";
@@ -29,8 +29,25 @@ import {
   type FastqPair,
 } from "../execution/samplesheet.js";
 
+/**
+ * Reference/samplesheet values remembered from relevant past runs, offered for
+ * reuse during parameterization (Phase 6 memory feeding Phase C).
+ */
+export interface MemorySuggestions {
+  /** Param name → remembered candidate values (e.g. genome → ["GRCm39"]). */
+  references: Record<string, string[]>;
+  /** Samplesheet paths from past runs. */
+  samplesheets: string[];
+}
+
 function shortName(pipeline: PipelineDefinition): string {
   return pipeline.name.split("/").pop() ?? pipeline.name;
+}
+
+/** Asks a question with an optional remembered default (Enter reuses it). */
+async function askDefault(io: AgentIO, question: string, def?: string): Promise<string> {
+  const raw = (await io.ask(`${question}${def ? ` [${def}]` : ""}:`)).trim();
+  return raw === "" ? def ?? "" : raw;
 }
 
 /** Creates the run directory and returns its paths. */
@@ -50,6 +67,7 @@ export async function fillParameters(
   session: Session,
   pipeline: PipelineDefinition,
   config: HirshConfig,
+  suggestions?: MemorySuggestions,
 ): Promise<{ runDir: string }> {
   const { runDir, outdir } = prepareRunDir(config, pipeline);
   session.outdir = outdir;
@@ -66,8 +84,8 @@ export async function fillParameters(
   }
 
   if (!session.useTestProfile) {
-    await buildSamplesheet(io, session, pipeline, runDir);
-    await fillReferenceParams(io, session, pipeline);
+    await buildSamplesheet(io, session, pipeline, runDir, suggestions);
+    await fillReferenceParams(io, session, pipeline, suggestions);
   }
 
   await fillOptionalParams(io, session, pipeline);
@@ -76,30 +94,43 @@ export async function fillParameters(
   return { runDir };
 }
 
-/** Required reference params (genome / fasta+gtf) for real data. */
-async function fillReferenceParams(
+/** Required reference params (genome / fasta+gtf) for real data. Exported for tests. */
+export async function fillReferenceParams(
   io: AgentIO,
   session: Session,
   pipeline: PipelineDefinition,
+  suggestions?: MemorySuggestions,
 ): Promise<void> {
   const hasGenome = pipeline.params.some((p) => p.name === "genome");
   if (!hasGenome) return;
 
   const genomeParam = pipeline.params.find((p) => p.name === "genome")!;
   const choices = genomeParam.choices ? ` (common options: ${genomeParam.choices.join(", ")})` : "";
-  const genome = await io.ask(
-    `iGenomes reference genome key${choices}. ` +
-      "Leave empty if you prefer to provide your own FASTA+GTF:",
-  );
-  if (genome.trim()) {
-    session.paramValues.genome = genome.trim();
-  } else {
-    const fasta = await io.ask("Path to the reference genome FASTA:");
-    if (fasta.trim()) session.paramValues.fasta = resolve(fasta.trim());
-    if (pipeline.params.some((p) => p.name === "gtf")) {
-      const gtf = await io.ask("Path to the GTF annotation:");
-      if (gtf.trim()) session.paramValues.gtf = resolve(gtf.trim());
-    }
+  const remGenome = suggestions?.references.genome?.[0];
+  const remFasta = suggestions?.references.fasta?.[0];
+  const remGtf = suggestions?.references.gtf?.[0];
+
+  const genomePrompt = remGenome
+    ? `iGenomes reference genome key${choices}. Remembered from a past run: ${remGenome}. ` +
+      "Press Enter to reuse it, type another key, or 'none' to provide FASTA+GTF:"
+    : `iGenomes reference genome key${choices}. Leave empty if you prefer to provide your own FASTA+GTF:`;
+  const genome = (await io.ask(genomePrompt)).trim();
+
+  if (remGenome && genome === "") {
+    session.paramValues.genome = remGenome;
+    io.info(`Reusing remembered genome ${remGenome}.`);
+    return;
+  }
+  if (genome && genome.toLowerCase() !== "none") {
+    session.paramValues.genome = genome;
+    return;
+  }
+
+  const fasta = await askDefault(io, "Path to the reference genome FASTA", remFasta);
+  if (fasta) session.paramValues.fasta = resolve(fasta);
+  if (pipeline.params.some((p) => p.name === "gtf")) {
+    const gtf = await askDefault(io, "Path to the GTF annotation", remGtf);
+    if (gtf) session.paramValues.gtf = resolve(gtf);
   }
 }
 
@@ -146,9 +177,13 @@ async function buildSamplesheet(
   session: Session,
   pipeline: PipelineDefinition,
   runDir: string,
+  suggestions?: MemorySuggestions,
 ): Promise<void> {
   io.heading("Samplesheet construction");
   io.info(pipeline.samplesheet.description);
+
+  // Option 0 — reuse a samplesheet remembered from a past run.
+  if (await useRememberedSamplesheet(io, session, pipeline, suggestions)) return;
 
   // Option 1 — reuse and validate an existing samplesheet.
   if (await useExistingSamplesheet(io, session, pipeline)) return;
@@ -213,6 +248,42 @@ async function useExistingSamplesheet(
     return false;
   }
 
+  return applyExistingSamplesheet(io, session, pipeline, abs, text);
+}
+
+/** Offers to reuse a samplesheet from a past run (Phase 6 memory → Phase C). Exported for tests. */
+export async function useRememberedSamplesheet(
+  io: AgentIO,
+  session: Session,
+  pipeline: PipelineDefinition,
+  suggestions?: MemorySuggestions,
+): Promise<boolean> {
+  const remembered = (suggestions?.samplesheets ?? []).filter((p) => existsSync(p));
+  if (remembered.length === 0) return false;
+
+  const path = remembered[0];
+  const reuse = await io.confirm(`Reuse the samplesheet from a past run (${path})?`, false);
+  if (!reuse) return false;
+
+  const abs = resolve(path);
+  let text: string;
+  try {
+    text = readFileSync(abs, "utf8");
+  } catch {
+    io.warn(`Couldn't read ${abs}; let's build one instead.`);
+    return false;
+  }
+  return applyExistingSamplesheet(io, session, pipeline, abs, text);
+}
+
+/** Validates a samplesheet's content and, if acceptable, records it on the session. */
+async function applyExistingSamplesheet(
+  io: AgentIO,
+  session: Session,
+  pipeline: PipelineDefinition,
+  abs: string,
+  text: string,
+): Promise<boolean> {
   const report = validateSamplesheetContent(text, pipeline.samplesheet.columns);
   io.info(`Read ${report.rowCount} data row(s); columns: ${report.header.join(", ")}.`);
   for (const e of report.errors) io.warn("  ✗ " + e);

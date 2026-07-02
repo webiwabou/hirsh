@@ -240,8 +240,10 @@ Hirsh remembers your past analyses across sessions in a **local, private** store
 (`~/.bioagent/memory.json`): each run's pipeline, intent (organism/data/objective),
 references used, output directory and status. When a new request resembles a past
 one, it surfaces the relevant history ("From your project memory — similar past
-analyses: …") so you can pick up where you left off. It's on by default and stays
-on your machine; disable it with `memory.enabled: false`.
+analyses: …") so you can pick up where you left off. During parameterization it
+also offers to **reuse a remembered reference** (genome/FASTA/GTF) or
+**samplesheet** from a relevant past run, so you don't retype them. It's on by
+default and stays on your machine; disable it with `memory.enabled: false`.
 
 ## Resource awareness
 
