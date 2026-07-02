@@ -94,8 +94,11 @@ Make every supported pipeline safe to run for real and make its output land as
   - ⬜ Remaining: capture resolved container image digests (from the Nextflow run
     report) for byte-exact reproducibility.
 - ⬜ **Resume & re-run.** Offer `-resume` and "run this again with one change".
-- ⬜ **The DE gap.** Present rnaseq → `differentialabundance` as an explicit next
-  step so "differentially expressed genes" actually gets answered.
+- ✅ **The DE gap.** Pipelines can declare a `followUp`; rnaseq now tells the user
+  (at selection and in the results) that it produces counts and that
+  `nf-core/differentialabundance` is the next step to actually call DEGs. We
+  suggest, we do not auto-chain.
+  - ⬜ Remaining: offer to run the follow-up directly (still with confirmation).
 
 ## Phase 3 — Environment & infrastructure autonomy
 

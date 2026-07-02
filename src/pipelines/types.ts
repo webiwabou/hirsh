@@ -78,4 +78,16 @@ export interface PipelineDefinition {
     outdirParam: string;
     outputs: ResultOutput[];
   };
+  /**
+   * Optional natural next analysis step, surfaced to the user (this pipeline's
+   * output is the next one's input). E.g. rnaseq (counts) → differentialabundance
+   * (differentially expressed genes). We suggest, we do not auto-chain.
+   */
+  followUp?: {
+    pipeline: string;
+    /** When this follow-up is relevant, in plain terms. */
+    when: string;
+    /** What the follow-up does with this pipeline's output. */
+    note: string;
+  };
 }

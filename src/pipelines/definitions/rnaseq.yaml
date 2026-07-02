@@ -81,6 +81,13 @@ resources:
   minMemoryGB: 24
   recommendedCpus: 8
 
+# rnaseq produces count matrices, not differential expression. Point users at the
+# natural next step so "differentially expressed genes" actually gets answered.
+followUp:
+  pipeline: nf-core/differentialabundance
+  when: your goal is differential expression (differentially expressed genes) between conditions
+  note: rnaseq produces gene/transcript count matrices; nf-core/differentialabundance takes those counts plus a comparison design and calls the differentially expressed genes.
+
 results:
   outdirParam: outdir
   outputs:

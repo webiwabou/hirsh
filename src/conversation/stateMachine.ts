@@ -130,6 +130,9 @@ export class Agent {
 
     this.io.say(`I suggest ${chosen.name} — ${chosen.title}.`);
     this.io.info(sel.rationale);
+    if (chosen.followUp) {
+      this.io.info(`Heads-up: ${chosen.followUp.note}`);
+    }
     const ok = await this.io.confirm(`Continue with ${chosen.name}?`, true);
     if (!ok) {
       return this.pickManually(session);
@@ -437,6 +440,13 @@ export class Agent {
     if (report.htmlReports.length > 0) {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
+
+    if (pipeline.followUp) {
+      this.io.say(
+        `\nNext analysis step: when ${pipeline.followUp.when}, run ${pipeline.followUp.pipeline}. ` +
+          pipeline.followUp.note,
+      );
     }
   }
 }
