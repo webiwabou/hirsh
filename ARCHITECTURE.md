@@ -34,6 +34,7 @@ src/
 │   ├── io.ts         AgentIO interface (decouples the flow from the terminal frontend)
 │   ├── answers.ts    lenient natural-language yes/no interpretation for confirmations
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
+│   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)

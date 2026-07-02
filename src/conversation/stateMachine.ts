@@ -67,6 +67,7 @@ import { initAndCommit, isGitAvailable } from "../execution/git.js";
 import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
+import { reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
 import { selectPipeline } from "./pipelineSelection.js";
 import type { AgentIO } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
@@ -111,6 +112,10 @@ export class Agent {
   async run(session: Session): Promise<void> {
     await this.phaseIntent(session);
     this.surfacePastRuns(session.query);
+    if (!(await this.phaseDesignReview(session))) {
+      session.phase = "done";
+      return;
+    }
     const outcome = await this.phaseSelect(session);
 
     if (outcome.kind === "compose") {
@@ -182,6 +187,46 @@ export class Agent {
       session.transcript.push({ role: "user", text: answer });
     }
     this.io.info("Continuing with the information gathered so far.");
+  }
+
+  /**
+   * Phase 6 — scientific dialogue. Reviews the experimental design (replication,
+   * controls, confounders/batch effects, balance, fit to objective) and shows
+   * constructive observations. Advisory: on a serious concern it asks whether to
+   * continue, but never forces a choice. Returns false only if the user chooses
+   * to stop and rethink.
+   */
+  private async phaseDesignReview(session: Session): Promise<boolean> {
+    const q = session.query;
+    if (!q.objective && !q.experimentalDesign) return true;
+
+    const review = await this.io.withSpinner("Reviewing the experimental design", () =>
+      reviewDesign(this.provider, q),
+    );
+    if (!review || review.observations.length === 0) {
+      if (review?.summary) this.io.info(review.summary);
+      return true;
+    }
+
+    this.io.heading("Experimental design review");
+    if (review.summary) this.io.say(review.summary);
+    for (const o of sortedObservations(review)) {
+      const tag = o.severity === "risk" ? "⚠ risk" : o.severity === "caution" ? "caution" : "note";
+      const line = `  ${tag} [${o.topic}]: ${o.message}`;
+      if (o.severity === "info") this.io.info(line);
+      else this.io.warn(line);
+      if (o.suggestion) this.io.info(`       suggestion: ${o.suggestion}`);
+    }
+
+    const worst = worstSeverity(review);
+    if (worst === "risk" || worst === "caution") {
+      this.io.info(
+        "This is advice, not a blocker — you know your experiment best. I can continue, or you " +
+          "can refine the design (/reset) and describe it again.",
+      );
+      return this.io.confirm("Continue to pipeline selection?", true);
+    }
+    return true;
   }
 
   /** Phase B — select the pipeline and allow user correction. */

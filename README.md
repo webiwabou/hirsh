@@ -211,6 +211,9 @@ HTML reports (open them in your browser):
 
 - **A · Intent** — extracts organism, data type, objective and experimental
   design; asks for what is missing, one thing at a time.
+- **Design review** — before selecting a pipeline, Hirsh reviews the experimental
+  design (biological replication, controls, confounders/batch effects, group
+  balance) and flags concerns with suggestions — advice, not a blocker.
 - **B · Selection** — picks the right curated nf-core pipeline (or honestly says
   none applies), lets you correct it, and — if none fits — offers to **compose**
   one from nf-core modules (see below).

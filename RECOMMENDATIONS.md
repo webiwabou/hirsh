@@ -291,9 +291,17 @@ The full realization: a scientific collaborator, not a command builder.
   persistence verified round-trip).
   - ⬜ Remaining: remember backend/executor preferences, and a first-run consent
     prompt.
-- ⬜ **Scientific dialogue.** Discuss experimental design, suggest appropriate
-  analyses and controls, flag confounders and batch effects, and reason about the
-  results' biological meaning.
+- 🔵 **Scientific dialogue.** Between understanding the intent and choosing a
+  pipeline, Hirsh reviews the **experimental design** — biological replication,
+  controls, confounders and batch effects, group balance, fit to the objective —
+  and reports constructive, plain-language observations graded info/caution/risk
+  with suggestions. Advisory (it asks whether to continue on a serious concern,
+  never blocks). Schema-validated LLM output; verified live (it caught n=2
+  under-replication and a treatment/processing-date batch confound)
+  (`conversation/designReview.ts`, unit-tested).
+  - ⬜ Remaining: fold the built samplesheet into the review (per-group replicate
+    counts), suggest specific analyses/controls, and reason about the *results'*
+    biological meaning too.
 - ⬜ **Publication-ready output.** Generate figures, methods paragraphs (with correct
   citations and exact versions) and reproducible reports.
 - ⬜ **End-to-end autonomy with guardrails.** Take a question all the way to an
