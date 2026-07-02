@@ -1,5 +1,8 @@
 name: nf-core/sarek
 version: 3.4.0
+citation:
+  text: "Garcia MU, Juhos S, et al. Sarek: A portable workflow for whole-genome sequencing analysis of germline and somatic variants. F1000Research. 2020."
+  doi: "10.12688/f1000research.16665.2"
 title: Variant calling (germline and somatic DNA)
 purpose: >-
   Detects genetic variants (SNVs, indels, structural variants, CNVs) from DNA

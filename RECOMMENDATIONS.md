@@ -302,8 +302,14 @@ The full realization: a scientific collaborator, not a command builder.
   - ⬜ Remaining: fold the built samplesheet into the review (per-group replicate
     counts), suggest specific analyses/controls, and reason about the *results'*
     biological meaning too.
-- ⬜ **Publication-ready output.** Generate figures, methods paragraphs (with correct
-  citations and exact versions) and reproducible reports.
+- 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
+  paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
+  pinned pipeline + Nextflow versions, the container engine, and the *real* tool
+  versions nf-core records in `pipeline_info/…software_versions` — with the
+  pipeline's citation (DOI) plus the nf-core and Nextflow papers
+  (`results/methods.ts`, unit-tested; verified render).
+  - ⬜ Remaining: generate figures and a fuller reproducible report; per-tool
+    citations inline (today they point to CITATIONS.md).
 - ⬜ **End-to-end autonomy with guardrails.** Take a question all the way to an
   interpreted answer, pausing only at the decisions that are the human's to make —
   destructive actions, spending money, or publishing.

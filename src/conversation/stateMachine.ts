@@ -55,6 +55,7 @@ import {
 import { buildManifest, writeProvenance } from "../execution/provenance.js";
 import type { EnvReport } from "../execution/envCheck.js";
 import { gatherResults, summarizeResults } from "../results/interpreter.js";
+import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
@@ -1222,6 +1223,60 @@ export class Agent {
       this.io.say(
         `\nNext analysis step: when ${pipeline.followUp.when}, run ${pipeline.followUp.pipeline}. ` +
           pipeline.followUp.note,
+      );
+    }
+
+    await this.offerMethods(session, pipeline);
+  }
+
+  /**
+   * Phase 6 — publication-ready methods. Builds a paste-ready methods paragraph
+   * and references from the run's pinned versions, container engine and the real
+   * tool versions nf-core recorded, and writes METHODS.md into the run directory.
+   */
+  private async offerMethods(session: Session, pipeline: PipelineDefinition): Promise<void> {
+    if (!session.outdir) return;
+    const make = await this.io.confirm(
+      "Generate a publication-ready methods paragraph (METHODS.md)?",
+      true,
+    );
+    if (!make) return;
+
+    const tools = readSoftwareVersions(session.outdir, pipeline.name);
+    let nextflowVersion: string | undefined;
+    let containerEngine: string = session.engine ?? this.config.execution.containerEngine;
+    try {
+      const manifest = JSON.parse(readFileSync(join(session.runDir ?? "", "run_manifest.json"), "utf8"));
+      nextflowVersion = manifest?.environment?.nextflow;
+      if (manifest?.environment?.containerEngine) containerEngine = manifest.environment.containerEngine;
+    } catch {
+      /* manifest optional */
+    }
+
+    const { paragraph, markdown } = buildMethods({
+      pipelineName: pipeline.name,
+      revision: pipeline.version,
+      nextflowVersion,
+      containerEngine,
+      organism: session.query.organism,
+      dataType: session.query.dataType,
+      tools,
+      pipelineCitation: pipeline.citation,
+    });
+
+    const path = join(session.runDir ?? session.outdir, "METHODS.md");
+    try {
+      writeFileSync(path, markdown, "utf8");
+      this.io.info(`Methods written: ${path}`);
+    } catch {
+      /* best-effort */
+    }
+    this.io.say("\nMethods (paste-ready):");
+    this.io.say(paragraph);
+    if (Object.keys(tools).length === 0) {
+      this.io.info(
+        "(No software-versions file found under pipeline_info/ — tool versions omitted; the " +
+          "paragraph still cites the pipeline, Nextflow and nf-core.)",
       );
     }
   }

@@ -45,6 +45,8 @@ export interface PipelineDefinition {
   name: string;
   /** Pinned revision passed to `-r`, e.g. "3.14.0". */
   version: string;
+  /** Primary citation for the pipeline, for publication-ready methods. */
+  citation?: { text: string; doi?: string };
   /** Short human-readable title. */
   title: string;
   /** Which biological question it answers (key for the LLM's semantic matching). */

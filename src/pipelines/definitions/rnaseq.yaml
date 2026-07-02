@@ -1,5 +1,8 @@
 name: nf-core/rnaseq
 version: 3.14.0
+citation:
+  text: "Patel H, Ewels P, et al. nf-core/rnaseq. Zenodo."
+  doi: "10.5281/zenodo.1400710"
 title: RNA-seq (gene expression quantification)
 purpose: >-
   Processes short-read RNA-seq data: quality control, adapter trimming,
