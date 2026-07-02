@@ -210,6 +210,12 @@ HTML reports (open them in your browser):
   (per-sample library sizes from count matrices, MultiQC per-sample metrics,
   variant counts from VCFs) and summarizes the findings in plain language.
 
+Every run also writes a **reproducibility bundle** into its run directory —
+`run_manifest.json` and a plain-language `PROVENANCE.md` recording the pipeline
+and pinned revision, the exact command, resolved parameters, samplesheet,
+environment and execution status — so an analysis can be archived, shared and
+reproduced.
+
 ## Resource awareness
 
 For real runs Hirsh compares the pipeline's typical memory/CPU needs against your

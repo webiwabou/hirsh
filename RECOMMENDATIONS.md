@@ -86,9 +86,13 @@ Make every supported pipeline safe to run for real and make its output land as
   - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
 - ⬜ **Schema-validated LLM outputs** with one self-correcting retry, so weaker
   local models stay reliable.
-- ⬜ **Reproducibility bundle.** Persist the resolved `params.yaml`, pipeline
-  revision, container digests, samplesheet and a plain-language provenance record
-  per run under a run directory the scientist can archive or share.
+- ✅ **Reproducibility bundle.** Every run writes `run_manifest.json` +
+  `PROVENANCE.md` into the run directory, capturing the pipeline + pinned revision,
+  the exact command, resolved params (`params.yaml`), samplesheet, environment
+  (Nextflow version, container engine, machine/OS), LLM used, and execution status
+  — for prepared-but-not-run commands too (`execution/provenance.ts`, unit-tested).
+  - ⬜ Remaining: capture resolved container image digests (from the Nextflow run
+    report) for byte-exact reproducibility.
 - ⬜ **Resume & re-run.** Offer `-resume` and "run this again with one change".
 - ⬜ **The DE gap.** Present rnaseq → `differentialabundance` as an explicit next
   step so "differentially expressed genes" actually gets answered.
@@ -226,6 +230,6 @@ The full realization: a scientific collaborator, not a command builder.
 - ⬜ Runs on laptop, HPC and cloud transparently
 - ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
-- ⬜ Produces reproducible, publication-ready provenance
+- 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
 - ⬜ Contributes novel, standards-compliant modules and pipelines back to nf-core
 - ⬜ Requires zero Nextflow/infra knowledge from the scientist

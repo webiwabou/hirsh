@@ -18,6 +18,8 @@ import {
   parseMemoryToGB,
   type MachineResources,
 } from "../execution/resources.js";
+import { buildManifest, writeProvenance } from "../execution/provenance.js";
+import type { EnvReport } from "../execution/envCheck.js";
 import { gatherResults, summarizeResults } from "../results/interpreter.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
@@ -345,18 +347,21 @@ export class Agent {
       this.io.info(
         "Once installed, you can run the command above manually from " + runDir + ".",
       );
+      this.writeRunProvenance(session, runDir, env, false);
       return false;
     }
 
     const go = await this.io.confirm("Run this command now?", false);
     if (!go) {
       this.io.info("Not running anything. The command and samplesheet are ready if you want to launch it yourself.");
+      this.writeRunProvenance(session, runDir, env, false);
       return false;
     }
 
     session.phase = "execute";
     this.io.heading("Running Nextflow (live log)");
     const result = await runNextflow(session.command ?? [], runDir, this.io);
+    this.writeRunProvenance(session, runDir, env, true, result.exitCode);
     if (result.exitCode !== 0) {
       this.io.warn(`Nextflow exited with an error (code ${result.exitCode}).`);
       if (result.errorSummary) {
@@ -367,6 +372,43 @@ export class Agent {
     }
     this.io.say("Run completed successfully.");
     return true;
+  }
+
+  /**
+   * Writes a reproducibility bundle (run_manifest.json + PROVENANCE.md) into the
+   * run directory. Best-effort: provenance must never block or fail a run.
+   */
+  private writeRunProvenance(
+    session: Session,
+    runDir: string,
+    env: EnvReport,
+    executed: boolean,
+    exitCode?: number,
+  ): void {
+    const pipeline = session.selectedPipeline;
+    if (!pipeline) return;
+    try {
+      const manifest = buildManifest({
+        pipelineName: pipeline.name,
+        revision: pipeline.version,
+        query: session.query,
+        command: session.command ?? [],
+        paramsFile: session.paramsFile,
+        params: session.paramValues,
+        samplesheet: session.samplesheetPath,
+        outdir: session.outdir,
+        nextflowVersion: env.nextflow.version,
+        containerEngine: this.config.execution.containerEngine,
+        machine: detectMachine(),
+        llmLabel: this.provider.label,
+        executed,
+        exitCode,
+      });
+      const paths = writeProvenance(runDir, manifest);
+      this.io.info(`Provenance written: ${paths.markdown}`);
+    } catch {
+      /* never block on provenance */
+    }
   }
 
   /** Phase E — locate and interpret the results. */
