@@ -110,8 +110,15 @@ the heart of the "no technical knowledge required" promise.
   feasibility** for each, and a clear recommendation.
 - ⬜ **Container & data staging.** Manage image pulls (Docker/Singularity/Apptainer),
   cache locations, and staging of large inputs; detect and explain disk pressure.
-- ⬜ **Automatic public data retrieval.** `fetchngs` from SRA/ENA accessions so a
-  scientist can start from "these GEO samples" with no local files.
+- ⬜ **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
+  what's missing and — with explicit confirmation — install it: Nextflow (plus a
+  compatible Java), and the chosen execution backend. Today Hirsh only *detects* the
+  toolchain and prints install instructions; it should be able to set it up itself.
+- ⬜ **Interactive environment selection.** Decide the execution backend through a
+  short Q&A — **Docker, Singularity/Apptainer, or Conda/Mamba** — check what's
+  available, install/enable the choice, and set the matching Nextflow profile,
+  instead of relying on a single `containerEngine` config value. (Conda/Mamba is not
+  a supported backend yet.)
 
 ## Phase 4 — Composing pipelines from nf-core building blocks ✅ (runnable; refinements remain)
 
@@ -149,6 +156,13 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   `-profile test -stub-run` executes the whole DAG (no data/containers) as the
   real "does it run" gate.
   - ⬜ Remaining: `nf-core lint` in the loop and a functional test on real data.
+- ⬜ **Custom & non-nf-core tools.** A composed pipeline should not be limited to
+  what already exists in the catalog. Let Hirsh generate standards-compliant
+  `modules/local/` processes that wrap the scientist's own tools/scripts (container
+  or conda directive, the `meta` map, `versions.yml`, a `stub:` block) and wire them
+  like any other module — mixing `modules/nf-core/` with `modules/local/` exactly as
+  real nf-core pipelines do. This is what makes "compose a genuinely new pipeline"
+  real when part of the toolchain isn't in nf-core.
 
 ## Phase 5 — Contributing back to the community
 
@@ -161,6 +175,15 @@ one-off analysis into reusable, community-grade software.
 - ⬜ **Assisted contribution.** Draft a module/subworkflow proposal and open a PR to
   nf-core/modules (or the relevant pipeline) — always with explicit human review
   and consent before anything is published.
+- ⬜ **Publish a whole pipeline.** Beyond single modules: take a composed pipeline to
+  full nf-core standards using the pipeline template (docs, CI, `nextflow_schema.json`,
+  full-size `test`/`test_full` data, `CHANGELOG`, licence, code of conduct), get
+  `nf-core pipelines lint` green, and — with explicit consent — create and push a
+  **public GitHub repository**.
+- ⬜ **nf-core inclusion guidance.** Walk the scientist through the community process
+  to have a published pipeline adopted into nf-core (requirements, naming, the
+  request/review steps), being honest that acceptance is a community decision the
+  agent cannot guarantee — it prepares and proposes, people decide.
 - ⬜ **Provenance for novelty.** Clearly attribute what was reused vs. newly created,
   so contributions are honest and reviewable.
 
@@ -199,8 +222,10 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Selects the right existing pipeline
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - ⬜ Negotiates compute (adapt / relocate / provision) with cost & time estimates
+- ⬜ Sets up its own toolchain & environment (installs Nextflow, picks Docker/Conda/…)
 - ⬜ Runs on laptop, HPC and cloud transparently
+- ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
 - ⬜ Produces reproducible, publication-ready provenance
-- ⬜ Contributes novel, standards-compliant modules back to nf-core
+- ⬜ Contributes novel, standards-compliant modules and pipelines back to nf-core
 - ⬜ Requires zero Nextflow/infra knowledge from the scientist
