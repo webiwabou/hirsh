@@ -218,7 +218,9 @@ HTML reports (open them in your browser):
 - **D · Confirmation and execution** — checks whether the machine can meet the
   pipeline's resource needs (adapting the caps or advising against the run),
   shows the full command and `params.yaml`, and only runs after your explicit
-  confirmation. Ctrl+C is forwarded to Nextflow for a clean shutdown.
+  confirmation. Ctrl+C is forwarded to Nextflow for a clean shutdown. Afterwards
+  it offers to **re-run** — reusing cached results with `-resume`, or after
+  changing one parameter — without redoing the whole setup.
 - **E · Interpretation** — locates the outputs, extracts concrete numbers
   (per-sample library sizes from count matrices, MultiQC per-sample metrics,
   variant counts from VCFs) and summarizes the findings in plain language.

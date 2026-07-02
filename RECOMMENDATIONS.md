@@ -105,7 +105,11 @@ Make every supported pipeline safe to run for real and make its output land as
   — for prepared-but-not-run commands too (`execution/provenance.ts`, unit-tested).
   - ⬜ Remaining: capture resolved container image digests (from the Nextflow run
     report) for byte-exact reproducibility.
-- ⬜ **Resume & re-run.** Offer `-resume` and "run this again with one change".
+- ✅ **Resume & re-run.** After a run, Hirsh offers to run it again — reusing cached
+  results with `-resume`, or after changing one parameter (rebuilding `params.yaml`
+  and the command, preserving the chosen backend/executor). The `-resume` flag is
+  normalized so repeated re-runs never duplicate it; each re-run re-interprets the
+  results (`applyResume`/`coerceLike` unit-tested).
 - ✅ **The DE gap.** Pipelines can declare a `followUp`; rnaseq now tells the user
   (at selection and in the results) that it produces counts and that
   `nf-core/differentialabundance` is the next step to actually call DEGs. We

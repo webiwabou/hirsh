@@ -66,6 +66,26 @@ type SelectOutcome =
 
 const MAX_INTENT_ROUNDS = 8;
 
+/** Normalizes a command's `-resume` flag so repeated re-runs never duplicate it. */
+export function applyResume(command: string[], resume: boolean): string[] {
+  const base = command.filter((a) => a !== "-resume");
+  return resume ? [...base, "-resume"] : base;
+}
+
+/** Coerces a new string value to the type of the current value (number/boolean). */
+export function coerceLike(
+  current: string | number | boolean,
+  raw: string,
+): string | number | boolean {
+  if (typeof current === "number" && raw.trim() !== "" && !Number.isNaN(Number(raw))) {
+    return Number(raw);
+  }
+  if (typeof current === "boolean" && /^(true|false)$/i.test(raw.trim())) {
+    return raw.trim().toLowerCase() === "true";
+  }
+  return raw;
+}
+
 export class Agent {
   constructor(
     private readonly provider: LLMProvider,
@@ -94,9 +114,19 @@ export class Agent {
     this.io.heading("Phase C · Parameterization");
     const { runDir } = await fillParameters(this.io, session, pipeline, this.config);
 
-    const executed = await this.phaseConfirmAndRun(session, runDir);
+    let executed = await this.phaseConfirmAndRun(session, runDir);
     if (executed) {
       await this.phaseResults(session, pipeline);
+    }
+
+    // Phase 2 — resume & re-run: offer to run again (with -resume, or after
+    // changing a parameter) as long as a command was prepared.
+    if (session.command) {
+      for (;;) {
+        const { done, executed: ran } = await this.phaseRerun(session, pipeline, runDir);
+        if (ran) await this.phaseResults(session, pipeline);
+        if (done) break;
+      }
     }
     session.phase = "done";
   }
@@ -819,9 +849,24 @@ export class Agent {
       return false;
     }
 
+    return this.executeAndReport(session, runDir, env, false);
+  }
+
+  /**
+   * Runs Nextflow (optionally with `-resume`), writes provenance and reports the
+   * outcome. `-resume` is normalized so repeated re-runs never duplicate it.
+   */
+  private async executeAndReport(
+    session: Session,
+    runDir: string,
+    env: EnvReport,
+    resume: boolean,
+  ): Promise<boolean> {
+    session.command = applyResume(session.command ?? [], resume);
+
     session.phase = "execute";
     this.io.heading("Running Nextflow (live log)");
-    const result = await runNextflow(session.command ?? [], runDir, this.io, session.runEnv);
+    const result = await runNextflow(session.command, runDir, this.io, session.runEnv);
     this.writeRunProvenance(session, runDir, env, true, result.exitCode);
     if (result.exitCode !== 0) {
       this.io.warn(`Nextflow exited with an error (code ${result.exitCode}).`);
@@ -832,6 +877,98 @@ export class Agent {
       return false;
     }
     this.io.say("Run completed successfully.");
+    return true;
+  }
+
+  /**
+   * Phase 2 — resume & re-run. After a run, offers to re-run reusing cached
+   * results (`-resume`) or to change one parameter and run again. Reuses the
+   * already-chosen backend/executor/env, so it's a quick loop. Returns whether a
+   * run was executed (so the caller can re-interpret results), and whether the
+   * user wants to keep going.
+   */
+  private async phaseRerun(
+    session: Session,
+    pipeline: PipelineDefinition,
+    runDir: string,
+  ): Promise<{ done: boolean; executed: boolean }> {
+    if (!session.command) return { done: true, executed: false };
+
+    this.io.say("");
+    this.io.say("Re-run options:");
+    this.io.say("  1) Re-run reusing cached results (-resume)");
+    this.io.say("  2) Re-run after changing one parameter");
+    this.io.say("  3) No, I'm done");
+    const ans = (await this.io.ask("Choose [3]:")).trim().toLowerCase();
+    if (ans === "" || ans === "3" || /^(n|no|done)$/.test(ans)) {
+      return { done: true, executed: false };
+    }
+
+    let resume: boolean;
+    if (ans === "1") {
+      resume = true;
+    } else if (ans === "2") {
+      const changed = await this.changeOneParameter(session, pipeline);
+      if (!changed) return { done: false, executed: false };
+      resume = await this.io.confirm(
+        "Reuse cached results for the unchanged steps (-resume)?",
+        true,
+      );
+    } else {
+      this.io.warn("I didn't understand that option.");
+      return { done: false, executed: false };
+    }
+
+    const engine = session.engine ?? this.config.execution.containerEngine;
+    const env = await checkEnvironment(engine);
+    if (!env.canExecute) {
+      this.io.warn("Can't re-run right now — the required software isn't available.");
+      return { done: false, executed: false };
+    }
+
+    const preview = applyResume(session.command ?? [], resume);
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + preview.join(" "));
+    const go = await this.io.confirm("Run it now?", true);
+    if (!go) return { done: false, executed: false };
+
+    const executed = await this.executeAndReport(session, runDir, env, resume);
+    return { done: false, executed };
+  }
+
+  /**
+   * Lets the user change one resolved parameter and rebuilds the command/params
+   * file. Returns true if a value actually changed.
+   */
+  private async changeOneParameter(session: Session, pipeline: PipelineDefinition): Promise<boolean> {
+    const entries = Object.entries(session.paramValues);
+    if (entries.length === 0) {
+      this.io.info("There are no parameters to change.");
+      return false;
+    }
+    this.io.say("Current parameters:");
+    entries.forEach(([k, v], i) => this.io.say(`  ${i + 1}) ${k} = ${v}`));
+    const sel = (await this.io.ask("Which parameter to change? (number or name):")).trim();
+
+    let name: string | null = null;
+    const n = Number.parseInt(sel, 10);
+    if (Number.isInteger(n) && n >= 1 && n <= entries.length) name = entries[n - 1][0];
+    else if (session.paramValues[sel] !== undefined) name = sel;
+    if (!name) {
+      this.io.warn("I didn't recognize that parameter.");
+      return false;
+    }
+
+    const current = session.paramValues[name];
+    const raw = (await this.io.ask(`New value for ${name} (current: ${current}):`)).trim();
+    if (raw === "") {
+      this.io.info("Left unchanged.");
+      return false;
+    }
+    session.paramValues[name] = coerceLike(current, raw);
+    if (name === pipeline.results.outdirParam) session.outdir = String(session.paramValues[name]);
+    finalizeCommand(session, pipeline, this.config);
+    this.io.info(`Set ${name} = ${session.paramValues[name]}.`);
     return true;
   }
 
