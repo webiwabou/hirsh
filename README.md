@@ -198,8 +198,10 @@ HTML reports (open them in your browser):
 - **B · Selection** — picks the right curated nf-core pipeline (or honestly says
   none applies), lets you correct it, and — if none fits — offers to **compose**
   one from nf-core modules (see below).
-- **C · Parameterization** — fills parameters and builds the samplesheet
-  (infers R1/R2 pairs from a FASTQ directory).
+- **C · Parameterization** — fills parameters and builds the samplesheet:
+  infers R1/R2 pairs from a FASTQ directory, asks per-sample tumor/normal +
+  patient for sarek somatic runs (and per-sample strandedness for rnaseq), or
+  validates an existing samplesheet you point it at.
 - **D · Confirmation and execution** — checks whether the machine can meet the
   pipeline's resource needs (adapting the caps or advising against the run),
   shows the full command and `params.yaml`, and only runs after your explicit

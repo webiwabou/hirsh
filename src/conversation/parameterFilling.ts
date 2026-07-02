@@ -12,7 +12,7 @@
  * On completion it leaves on the session: useTestProfile, outdir, paramValues,
  * samplesheetPath and command.
  */
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { HirshConfig } from "../config/types.js";
@@ -20,9 +20,11 @@ import type { PipelineDefinition, PipelineParam } from "../pipelines/types.js";
 import type { AgentIO } from "./io.js";
 import type { Session } from "./session.js";
 import {
+  checkSomaticDesign,
   inferPairs,
   previewCsv,
   scanFastqs,
+  validateSamplesheetContent,
   writeCsv,
   type FastqPair,
 } from "../execution/samplesheet.js";
@@ -148,7 +150,12 @@ async function buildSamplesheet(
   io.heading("Samplesheet construction");
   io.info(pipeline.samplesheet.description);
 
+  // Option 1 — reuse and validate an existing samplesheet.
+  if (await useExistingSamplesheet(io, session, pipeline)) return;
+
+  // Option 2 — build one from the user's files.
   const isProtein = pipeline.name.includes("proteinfamilies");
+  const isSarek = pipeline.name.includes("sarek");
   const header = pipeline.samplesheet.columns.map((c) => c.name);
   const rows: Array<Record<string, string>> = [];
 
@@ -158,34 +165,17 @@ async function buildSamplesheet(
     if (entries.length === 0) {
       io.warn("I found no FASTA files in that directory; the samplesheet will be empty.");
     }
-    for (const f of entries) {
-      rows.push({ sample: baseName(f), fasta: f });
-    }
+    for (const f of entries) rows.push({ sample: baseName(f), fasta: f });
   } else {
     const dir = await io.ask("Directory with the FASTQ files (.fastq.gz / .fq.gz):");
     const scan = scanFastqs(dir);
-    if (scan.files.length === 0) {
-      io.warn("I found no FASTQ files in that directory.");
-    }
+    if (scan.files.length === 0) io.warn("I found no FASTQ files in that directory.");
     const pairs = inferPairs(scan);
-    const isSarek = pipeline.name.includes("sarek");
-    let strandedness = "auto";
-    let status = "0";
-    if (!isSarek) {
-      const s = await io.ask("Library strandedness (forward/reverse/unstranded/auto):");
-      if (s.trim()) strandedness = s.trim();
+    if (isSarek) {
+      rows.push(...(await buildSarekRows(io, pairs)));
+      for (const w of checkSomaticDesign(rows)) io.warn(w);
     } else {
-      const somatic = await io.confirm("Is this a somatic (tumor/normal) analysis?", false);
-      status = somatic ? "1" : "0";
-      if (somatic) {
-        io.warn(
-          "For tumor/normal you may need to adjust patient/status per row in the CSV; " +
-            "the agent assigns a uniform status at this phase.",
-        );
-      }
-    }
-    for (const p of pairs) {
-      rows.push(rowForFastq(pipeline.name, p, strandedness, status));
+      rows.push(...(await buildRnaseqRows(io, pairs)));
     }
   }
 
@@ -193,7 +183,8 @@ async function buildSamplesheet(
   io.say(previewCsv(header, rows));
   const ok = await io.confirm("Write this samplesheet?", true);
   if (!ok) {
-    io.info("Alright, I won't write it. You can point to another directory by restarting with /reset.");
+    io.info("Alright, I won't write it. Restart with /reset to try another directory.");
+    return;
   }
   const path = join(runDir, pipeline.samplesheet.filename);
   writeCsv(path, header, rows);
@@ -202,28 +193,88 @@ async function buildSamplesheet(
   io.info(`Samplesheet written to ${path}`);
 }
 
-function rowForFastq(
-  pipelineName: string,
-  p: FastqPair,
-  strandedness: string,
-  status: string,
-): Record<string, string> {
-  if (pipelineName.includes("sarek")) {
-    return {
-      patient: p.sample,
-      sample: p.sample,
-      status,
-      lane: "L001",
-      fastq_1: p.fastq_1,
-      fastq_2: p.fastq_2 ?? "",
-    };
+/** Lets the user point at an existing CSV; validates it against the column spec. */
+async function useExistingSamplesheet(
+  io: AgentIO,
+  session: Session,
+  pipeline: PipelineDefinition,
+): Promise<boolean> {
+  const useExisting = await io.confirm("Do you already have a samplesheet CSV?", false);
+  if (!useExisting) return false;
+
+  const raw = (await io.ask("Path to your samplesheet CSV:")).trim();
+  if (!raw) return false;
+  const abs = resolve(raw);
+  let text: string;
+  try {
+    text = readFileSync(abs, "utf8");
+  } catch {
+    io.warn(`Couldn't read ${abs}. I'll help you build one instead.`);
+    return false;
   }
-  // rnaseq
-  return {
+
+  const report = validateSamplesheetContent(text, pipeline.samplesheet.columns);
+  io.info(`Read ${report.rowCount} data row(s); columns: ${report.header.join(", ")}.`);
+  for (const e of report.errors) io.warn("  ✗ " + e);
+  for (const w of report.warnings) io.info("  ! " + w);
+  if (!report.ok) {
+    const anyway = await io.confirm("The samplesheet has problems. Use it anyway?", false);
+    if (!anyway) {
+      io.info("Okay — let's build one instead.");
+      return false;
+    }
+  }
+  session.samplesheetPath = abs;
+  session.paramValues.input = abs;
+  io.info(`Using samplesheet ${abs}`);
+  return true;
+}
+
+/** rnaseq rows with a shared default strandedness and optional per-sample override. */
+async function buildRnaseqRows(io: AgentIO, pairs: FastqPair[]): Promise<Array<Record<string, string>>> {
+  const def = (await io.ask("Default library strandedness (forward/reverse/unstranded/auto) [auto]:")).trim() || "auto";
+  const perSample = new Map<string, string>();
+  if (pairs.length > 1) {
+    const same = await io.confirm(`Use "${def}" strandedness for all ${pairs.length} samples?`, true);
+    if (!same) {
+      for (const p of pairs) {
+        const s = (await io.ask(`Strandedness for ${p.sample} [${def}]:`)).trim() || def;
+        perSample.set(p.sample, s);
+      }
+    }
+  }
+  return pairs.map((p) => ({
     sample: p.sample,
     fastq_1: p.fastq_1,
     fastq_2: p.fastq_2 ?? "",
-    strandedness,
+    strandedness: perSample.get(p.sample) ?? def,
+  }));
+}
+
+/** sarek rows: germline (status 0) or per-sample tumor/normal grouped by patient. */
+async function buildSarekRows(io: AgentIO, pairs: FastqPair[]): Promise<Array<Record<string, string>>> {
+  const somatic = await io.confirm("Is this a somatic (tumor/normal) analysis?", false);
+  if (!somatic) {
+    return pairs.map((p) => sarekRow(p.sample, p.sample, "0", p));
+  }
+  io.info("For each sample, tell me its patient/individual and whether it is tumor or normal.");
+  const rows: Array<Record<string, string>> = [];
+  for (const p of pairs) {
+    const patient = (await io.ask(`Patient/individual ID for sample "${p.sample}" [${p.sample}]:`)).trim() || p.sample;
+    const isTumor = await io.confirm(`Is "${p.sample}" a TUMOR sample? (No = normal)`, false);
+    rows.push(sarekRow(patient, p.sample, isTumor ? "1" : "0", p));
+  }
+  return rows;
+}
+
+function sarekRow(patient: string, sample: string, status: string, p: FastqPair): Record<string, string> {
+  return {
+    patient,
+    sample,
+    status,
+    lane: "L001",
+    fastq_1: p.fastq_1,
+    fastq_2: p.fastq_2 ?? "",
   };
 }
 

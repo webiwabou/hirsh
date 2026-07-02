@@ -78,9 +78,12 @@ Make every supported pipeline safe to run for real and make its output land as
   (pure parsers in `results/parsers.ts`, unit-tested).
   - ⬜ Remaining: per-tool detail (RSeQC/Picard sections, variant-type breakdowns)
     and small inline tables/charts.
-- ⬜ **Correct multi-sample designs.** Proper tumor/normal pairing for sarek
-  (patient/status per row), per-sample strandedness for rnaseq, and validation of
-  user-supplied samplesheets.
+- ✅ **Correct multi-sample designs.** sarek now asks per-sample patient +
+  tumor/normal (grouped by patient) and warns when a patient lacks a matched
+  normal; rnaseq supports per-sample strandedness (shared default + overrides);
+  users can point at an existing samplesheet, which is validated against the
+  pipeline's column spec (`validateSamplesheetContent`, unit-tested).
+  - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
 - ⬜ **Schema-validated LLM outputs** with one self-correcting retry, so weaker
   local models stay reliable.
 - ⬜ **Reproducibility bundle.** Persist the resolved `params.yaml`, pipeline

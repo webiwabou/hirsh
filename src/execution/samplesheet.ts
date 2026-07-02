@@ -102,3 +102,78 @@ export function previewCsv(header: string[], rows: Array<Record<string, string>>
   }
   return out.join("\n");
 }
+
+export interface ColumnSpec {
+  name: string;
+  required: boolean;
+}
+
+export interface ValidationReport {
+  ok: boolean;
+  rowCount: number;
+  header: string[];
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Validates a user-supplied samplesheet against a pipeline's column spec.
+ * Pure (text in, report out) so it can be unit-tested without disk.
+ */
+export function validateSamplesheetContent(text: string, columns: ColumnSpec[]): ValidationReport {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (lines.length === 0) {
+    return { ok: false, rowCount: 0, header: [], errors: ["The samplesheet is empty."], warnings };
+  }
+
+  const header = lines[0].split(",").map((h) => h.trim());
+  const rowCount = lines.length - 1;
+
+  const known = new Set(columns.map((c) => c.name));
+  for (const col of columns) {
+    if (col.required && !header.includes(col.name)) {
+      errors.push(`Missing required column "${col.name}".`);
+    }
+  }
+  for (const h of header) {
+    if (h && !known.has(h)) warnings.push(`Unexpected column "${h}" (will be ignored by the pipeline).`);
+  }
+  if (rowCount === 0) errors.push("The samplesheet has a header but no data rows.");
+
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(",");
+    if (cells.length !== header.length) {
+      warnings.push(`Row ${i} has ${cells.length} columns but the header has ${header.length}.`);
+    }
+  }
+
+  return { ok: errors.length === 0, rowCount, header, errors, warnings };
+}
+
+/**
+ * Sanity-checks a somatic (tumor/normal) design: each patient should have at
+ * least one normal (status 0). Returns human-readable warnings.
+ */
+export function checkSomaticDesign(rows: Array<Record<string, string>>): string[] {
+  const byPatient = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const patient = row.patient ?? "";
+    const set = byPatient.get(patient) ?? new Set<string>();
+    set.add(row.status ?? "");
+    byPatient.set(patient, set);
+  }
+  const warnings: string[] = [];
+  for (const [patient, statuses] of byPatient) {
+    if (!statuses.has("0")) {
+      warnings.push(
+        `Patient "${patient}" has no normal sample (status 0); somatic callers need a matched normal or will run tumor-only.`,
+      );
+    }
+    if (!statuses.has("1")) {
+      warnings.push(`Patient "${patient}" has no tumor sample (status 1).`);
+    }
+  }
+  return warnings;
+}
