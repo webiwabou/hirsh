@@ -204,7 +204,9 @@ HTML reports (open them in your browser):
   pipeline's resource needs (adapting the caps or advising against the run),
   shows the full command and `params.yaml`, and only runs after your explicit
   confirmation. Ctrl+C is forwarded to Nextflow for a clean shutdown.
-- **E · Interpretation** — locates and summarizes the results in plain language.
+- **E · Interpretation** — locates the outputs, extracts concrete numbers
+  (per-sample library sizes from count matrices, MultiQC per-sample metrics,
+  variant counts from VCFs) and summarizes the findings in plain language.
 
 ## Resource awareness
 
