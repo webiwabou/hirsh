@@ -116,7 +116,7 @@ Make every supported pipeline safe to run for real and make its output land as
   suggest, we do not auto-chain.
   - ⬜ Remaining: offer to run the follow-up directly (still with confirmation).
 
-## Phase 3 — Environment & infrastructure autonomy 🔵 (mostly shipped)
+## Phase 3 — Environment & infrastructure autonomy ✅ (shipped; Docker install stays guided)
 
 Hirsh should manage *where and how* things run, not just *what* runs — this is
 the heart of the "no technical knowledge required" promise. Backend selection,
@@ -168,13 +168,15 @@ negotiation and container/data staging are in; full toolchain bootstrapping
   non-local executor (data stages on the target).
   - ⬜ Remaining: real image sizes from the pipeline's container manifest, work-dir
     relocation to a bigger disk, and pruning the cache when it grows.
-- 🔵 **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
-  what's missing and — with explicit confirmation — install it. Nextflow is now
-  self-installable: when it's absent, Hirsh offers to run the official installer
-  (checking for Java first) and place the binary on PATH, instead of only printing
-  instructions (`execution/environment.ts::bootstrapNextflow`).
-  - ⬜ Remaining: install the chosen execution backend itself (Docker/Conda), and a
-    compatible Java when missing — today these are still detect-and-guide.
+- ✅ **Toolchain bootstrapping.** On a fresh machine, Hirsh installs what's missing
+  with explicit confirmation and makes it usable in the same session (prepending
+  the new bin dirs to PATH): **Nextflow** (official installer), **Conda/Mamba**
+  (the Miniforge installer, when no backend is available), and **Java 17+** for
+  Nextflow (via Conda when present). Each degrades gracefully with guidance if it
+  can't proceed (`execution/environment.ts::bootstrap{Nextflow,Conda,Java}`; the
+  platform/PATH helpers are unit-tested).
+  - ⬜ Remaining: Docker/Singularity install (needs root and is OS-specific, so it
+    stays detect-and-guide), and a system JDK without Conda.
 - ✅ **Interactive environment selection.** Before each run Hirsh detects which
   backends are actually available — **Docker, Singularity/Apptainer, Conda or
   Mamba** — recommends the most reproducible one present (keeping the configured
@@ -345,7 +347,7 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Selects the right existing pipeline
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
-- 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
+- ✅ Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba, and installs Nextflow, Conda/Mamba and Java on a fresh machine; Docker install stays guided)
 - 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
 - ✅ Composes pipelines that mix nf-core modules with the scientist's own tools (generated modules/local/ + nf-core, runs via stub)
 - ✅ Interprets results as science, quantitatively and biologically — concrete numbers, meaning in context of the objective, and revisiting pre-run design caveats

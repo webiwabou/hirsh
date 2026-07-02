@@ -34,7 +34,9 @@ explicit confirmation) and explains the results in plain language.
   install it yourself: `curl -s https://get.nextflow.io | bash`.
 - An **execution backend** — **Docker**, **Singularity/Apptainer**, **Conda** or
   **Mamba**. Before a run Hirsh detects which of these are available and lets you
-  pick one interactively (recommending the most reproducible option present).
+  pick one interactively (recommending the most reproducible option present). On a
+  fresh machine it can install **Conda/Mamba** (Miniforge) and **Java** for you
+  with confirmation; Docker/Singularity installs stay guided (they need root).
 - An **LLM backend**:
   - **Ollama** running locally (`ollama serve`) with a tool-calling capable model
     pulled (`ollama pull <model>`), **or**

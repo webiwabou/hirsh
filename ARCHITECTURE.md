@@ -41,7 +41,7 @@ src/
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
 │   ├── envCheck.ts   verifies nextflow + the chosen backend (docker/singularity/conda/mamba) on PATH
-│   ├── environment.ts  detects backends, interactive selection, Nextflow bootstrap (Phase 3)
+│   ├── environment.ts  detects backends, interactive selection, Nextflow/Conda/Java bootstrap (Phase 3)
 │   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
 │   ├── negotiation.ts  infrastructure alternatives (cap/cluster/cloud) with rough time/cost/feasibility (Phase 3)
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)

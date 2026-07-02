@@ -13,6 +13,7 @@ import type { PipelineDefinition } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
 import {
   BACKENDS,
+  bootstrapConda,
   bootstrapNextflow,
   chooseBackend,
   detectBackends,
@@ -860,10 +861,22 @@ export class Agent {
    * session so the command profile and provenance reflect it.
    */
   private async phaseEnvironment(session: Session): Promise<void> {
-    const statuses = await this.io.withSpinner("Checking execution backends", () =>
+    let statuses = await this.io.withSpinner("Checking execution backends", () =>
       detectBackends(),
     );
-    const chosen = await chooseBackend(this.io, statuses, this.config.execution.containerEngine);
+    let chosen = await chooseBackend(this.io, statuses, this.config.execution.containerEngine);
+
+    // Phase 3: nothing available → offer to install Conda/Mamba (Miniforge) so a
+    // fresh machine can still run, then re-detect and choose.
+    if (!chosen) {
+      const boot = await bootstrapConda(this.io);
+      this.io.info(boot.message);
+      if (boot.installed) {
+        statuses = await detectBackends();
+        chosen = await chooseBackend(this.io, statuses, "conda");
+      }
+    }
+
     if (chosen) {
       session.engine = chosen;
       this.io.info(

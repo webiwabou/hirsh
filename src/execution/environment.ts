@@ -228,13 +228,18 @@ export async function bootstrapNextflow(io: AgentIO): Promise<BootstrapResult> {
   }
 
   // Verify Java is present first — the installer fails cryptically without it.
-  const java = await probe("java", ["-version"]);
+  let java = await probe("java", ["-version"]);
+  if (!java.ok) {
+    const jdk = await bootstrapJava(io);
+    io.info(jdk.message);
+    if (jdk.installed) java = await probe("java", ["-version"]);
+  }
   if (!java.ok) {
     return {
       installed: false,
       message:
-        "Java was not found on PATH. Nextflow needs Java 17+ (e.g. Temurin/OpenJDK). " +
-        "Install Java first, then re-run.",
+        "Java is still not available. Nextflow needs Java 17+ (e.g. Temurin/OpenJDK). " +
+        "Install Java, then re-run.",
     };
   }
 
@@ -279,4 +284,116 @@ export async function bootstrapNextflow(io: AgentIO): Promise<BootstrapResult> {
     binDir,
     message: `Nextflow installed into ${binDir}.${pathNote}`,
   };
+}
+
+// --- Backend & Java bootstrapping (Phase 3) ---
+
+/** The Miniforge installer asset for a platform/arch, or null if unsupported. */
+export function miniforgeInstallerUrl(platform: string, arch: string): string | null {
+  const os = platform === "darwin" ? "MacOSX" : platform === "linux" ? "Linux" : null;
+  if (!os) return null; // Windows uses an .exe installer — not handled here.
+  const machine = arch === "arm64" ? (os === "MacOSX" ? "arm64" : "aarch64") : arch === "x64" ? "x86_64" : null;
+  if (!machine) return null;
+  return `https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-${os}-${machine}.sh`;
+}
+
+/** conda's executable directories under an install prefix. */
+export function condaBinDirs(prefix: string): string[] {
+  return [join(prefix, "bin"), join(prefix, "condabin")];
+}
+
+/** Prepends dirs to a PATH string, de-duplicating (dirs win, first-listed first). */
+export function prependPath(current: string, dirs: string[]): string {
+  const existing = current ? current.split(":") : [];
+  const seen = new Set<string>();
+  const ordered = [...dirs, ...existing].filter((d) => d && !seen.has(d) && seen.add(d) !== undefined);
+  return ordered.join(":");
+}
+
+/** Makes newly installed tool dirs visible to this process and its children. */
+function activatePath(dirs: string[]): void {
+  process.env.PATH = prependPath(process.env.PATH ?? "", dirs);
+}
+
+/**
+ * Offers to install Conda/Mamba via the official Miniforge installer (confirmed).
+ * On success the new bin dirs are added to this process's PATH so the run can use
+ * them. Never throws; returns guidance on failure.
+ */
+export async function bootstrapConda(io: AgentIO): Promise<BootstrapResult> {
+  const url = miniforgeInstallerUrl(process.platform, process.arch);
+  if (!url) {
+    return {
+      installed: false,
+      message:
+        `Automatic Conda install isn't supported on ${process.platform}/${process.arch}. ` +
+        "Install Miniforge manually: https://github.com/conda-forge/miniforge",
+    };
+  }
+  const prefix = join(homedir(), "miniforge3");
+  io.info(
+    `Conda/Mamba isn't installed. I can install Miniforge into ${prefix} ` +
+      "(downloads the official installer and runs it unattended). This needs network access.",
+  );
+  const ok = await io.confirm("Install Miniforge (conda + mamba) now?", false);
+  if (!ok) {
+    return {
+      installed: false,
+      message: "Skipped. Install Miniforge yourself: https://github.com/conda-forge/miniforge",
+    };
+  }
+
+  const done = await io.withSpinner("Installing Miniforge", async () => {
+    const script = join(homedir(), ".bioagent-miniforge.sh");
+    const cmd = `curl -fsSL "${url}" -o "${script}" && bash "${script}" -b -p "${prefix}" && rm -f "${script}"`;
+    const code = await new Promise<number>((res) => {
+      const child = spawn("bash", ["-c", cmd], { stdio: ["ignore", "ignore", "pipe"] });
+      child.on("error", () => res(1));
+      child.on("close", (c) => res(c ?? 1));
+    });
+    return code === 0 && existsSync(join(prefix, "bin", "conda"));
+  });
+
+  if (!done) {
+    return { installed: false, message: "The Miniforge install did not complete. Try it manually." };
+  }
+  activatePath(condaBinDirs(prefix));
+  return { installed: true, binDir: join(prefix, "bin"), message: `Miniforge installed into ${prefix}.` };
+}
+
+/**
+ * Offers to install a JDK for Nextflow. Uses Conda when available (installs
+ * openjdk into a dedicated prefix); otherwise returns guidance (a system JDK
+ * needs a package manager we won't assume). Never throws.
+ */
+export async function bootstrapJava(io: AgentIO): Promise<BootstrapResult> {
+  const conda = await probe("conda", ["--version"]);
+  if (!conda.ok) {
+    return {
+      installed: false,
+      message:
+        "Java (17+) is required and I can't install it automatically without Conda or a package " +
+        "manager. Install a JDK (e.g. Temurin: https://adoptium.net) or Conda, then re-run.",
+    };
+  }
+  const prefix = join(homedir(), ".bioagent", "jdk");
+  io.info(`Java isn't installed. I can install OpenJDK via Conda into ${prefix}.`);
+  const ok = await io.confirm("Install OpenJDK (via Conda) now?", false);
+  if (!ok) {
+    return { installed: false, message: "Skipped Java install." };
+  }
+  const done = await io.withSpinner("Installing OpenJDK", async () => {
+    const cmd = `conda create -y -p "${prefix}" -c conda-forge 'openjdk>=17'`;
+    const code = await new Promise<number>((res) => {
+      const child = spawn("bash", ["-c", cmd], { stdio: ["ignore", "ignore", "pipe"] });
+      child.on("error", () => res(1));
+      child.on("close", (c) => res(c ?? 1));
+    });
+    return code === 0 && existsSync(join(prefix, "bin", "java"));
+  });
+  if (!done) {
+    return { installed: false, message: "The OpenJDK install did not complete." };
+  }
+  activatePath([join(prefix, "bin")]);
+  return { installed: true, binDir: join(prefix, "bin"), message: `OpenJDK installed into ${prefix}.` };
 }
