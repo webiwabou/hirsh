@@ -238,7 +238,7 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   - ⬜ Remaining: let the LLM *propose* local tools from intent (today they're
     gathered interactively), multi-input local modules, and per-tool test data.
 
-## Phase 5 — Contributing back to the community 🔵 (packaging + publishing shipped)
+## Phase 5 — Contributing back to the community 🔵 (largely shipped)
 
 When Hirsh builds something new and good, it should help share it — turning a
 one-off analysis into reusable, community-grade software.
@@ -270,12 +270,17 @@ one-off analysis into reusable, community-grade software.
   not handle credentials itself.
   - ⬜ Remaining: reach a green `nf-core pipelines lint` and bundle full-size test
     data before recommending publication.
-- ⬜ **nf-core inclusion guidance.** Walk the scientist through the community process
-  to have a published pipeline adopted into nf-core (requirements, naming, the
-  request/review steps), being honest that acceptance is a community decision the
-  agent cannot guarantee — it prepares and proposes, people decide.
-- ⬜ **Provenance for novelty.** Clearly attribute what was reused vs. newly created,
-  so contributions are honest and reviewable.
+- ✅ **nf-core inclusion guidance.** After packaging, Hirsh can write a step-by-step
+  `NFCORE_INCLUSION.md` guide: a name check (nf-core naming rules, with a normalized
+  suggestion), the scope proposal (Slack #new-pipelines / nf-core/proposals), the
+  official-template + lint + full-test-data + review requirements, and the
+  request/creation steps — stating plainly that acceptance is a community decision it
+  cannot guarantee (`composition/inclusion.ts`, unit-tested).
+- 🔵 **Provenance for novelty.** Generated projects already separate what was reused
+  from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
+  the custom local tools ("not from nf-core"); `modules.json` pins only the real
+  nf-core modules. Contributions are therefore honest about origin.
+  - ⬜ Remaining: a single novelty manifest summarizing reused-vs-new across a run.
 
 ## Phase 6 — The zero-technical-knowledge co-scientist
 

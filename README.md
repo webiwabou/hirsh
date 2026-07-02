@@ -376,6 +376,10 @@ the **nf-core/modules layout** (`main.nf`, `meta.yml`, `environment.yml` and an
 add real test data, run `nf-core modules test`/`lint`, then create the PR).
 Opening the PR stays your call — nf-core acceptance is a community decision.
 
+Finally, Hirsh can write an `NFCORE_INCLUSION.md` guide walking you through getting
+a whole pipeline **adopted into nf-core** (name check, scope proposal, template/lint
+requirements, review steps) — honest that acceptance is the community's decision.
+
 ## Development
 
 ```bash

@@ -63,6 +63,7 @@ import { generatePipeline } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
 import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
 import { writeContribution } from "../composition/contribution.js";
+import { buildInclusionGuide, validateNfCoreName } from "../composition/inclusion.js";
 import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
 import type { ResolvedComposition } from "../composition/types.js";
 import { initAndCommit, isGitAvailable } from "../execution/git.js";
@@ -526,6 +527,41 @@ export class Agent {
     }
 
     await this.offerPublish(dir, resolved);
+    await this.offerInclusionGuide(dir, resolved.plan.pipelineName);
+  }
+
+  /**
+   * Phase 5 — nf-core inclusion guidance. Offers to write a step-by-step guide
+   * (naming check, scope proposal, template/lint requirements, review) for getting
+   * the pipeline adopted into nf-core — honest that acceptance is a community call.
+   */
+  private async offerInclusionGuide(dir: string, pipelineName: string): Promise<void> {
+    const want = await this.io.confirm(
+      "Show how to get this pipeline included in nf-core (community process)?",
+      false,
+    );
+    if (!want) return;
+
+    const check = validateNfCoreName(pipelineName);
+    if (!check.ok) {
+      this.io.warn(
+        `Heads-up on the name: nf-core names are short, lowercase and alphanumeric — ` +
+          `"${pipelineName}" would become "${check.normalized}". ${check.issues.join(" ")}`,
+      );
+    }
+    const guide = buildInclusionGuide(pipelineName);
+    const path = join(dir, "NFCORE_INCLUSION.md");
+    try {
+      writeFileSync(path, guide, "utf8");
+      this.io.info(`Inclusion guide written: ${path}`);
+    } catch {
+      /* best-effort */
+    }
+    this.io.info(
+      "In short: propose it in the nf-core Slack #new-pipelines (scope check), build from the " +
+        "official template, get `nf-core pipelines lint` green with full test data and reviews, " +
+        "then a maintainer creates it under nf-core. Acceptance is the community's decision.",
+    );
   }
 
   /** Assisted GitHub publishing — strictly opt-in, defaulting to a private repo. */
