@@ -1,0 +1,80 @@
+name: nf-core/proteinfamilies
+version: 1.0.0
+title: Protein families (clustering and family generation)
+purpose: >-
+  Groups protein sequences into families by similarity: sequence clustering,
+  multiple alignment of each family and model building (HMMs). Useful to organize
+  large protein sets into families and detect redundancy or novelty.
+useWhen:
+  - The user wants to group/classify proteins into families.
+  - Mentions "protein families", "protein clustering", "HMM", "MMseqs2".
+  - Has a (large) set of amino-acid sequences to organize.
+organisms: Organism-independent; works on amino-acid sequences (protein FASTA).
+dataType: Protein (amino-acid sequences in FASTA), not sequencing reads.
+
+samplesheet:
+  filename: samplesheet.csv
+  description: >-
+    One row per protein sequence set to process. Each row points to an amino-acid
+    FASTA file.
+  columns:
+    - name: sample
+      required: true
+      description: Identifier of the protein set.
+    - name: fasta
+      required: true
+      description: Path to the FASTA file with the amino-acid sequences.
+
+params:
+  - name: input
+    type: path
+    required: true
+    providedBySamplesheet: true
+    description: Path to the samplesheet.csv with the protein sets. Built by the agent.
+  - name: outdir
+    type: path
+    required: true
+    description: Directory where results are written.
+  - name: clustering_tool
+    type: enum
+    required: false
+    default: mmseqs
+    choices: [mmseqs, linclust]
+    description: Sequence clustering algorithm. mmseqs is the most general.
+  - name: cluster_seq_identity
+    type: number
+    required: false
+    default: 0.5
+    description: >-
+      Minimum sequence identity (0-1) to group two proteins into the same family.
+      Higher values = stricter and more numerous families.
+  - name: cluster_coverage
+    type: number
+    required: false
+    default: 0.9
+    description: Minimum alignment coverage (0-1) required for clustering.
+
+profiles:
+  recommended: docker
+  hasTestProfile: true
+  testProfile: test
+
+# Guidance for REAL runs (ignored for the test profile). Memory scales with the
+# size of the protein set being clustered.
+resources:
+  recommendedMemoryGB: 16
+  minMemoryGB: 8
+  recommendedCpus: 4
+
+results:
+  outdirParam: outdir
+  outputs:
+    - path: multiqc/multiqc_report.html
+      kind: multiqc_html
+      description: MultiQC report with process statistics.
+    - path: families
+      kind: directory
+      description: Generated protein families (per-family alignments and HMM models).
+    - path: clustering
+      kind: directory
+      description: Sequence clustering results (assignment of each protein to its cluster).

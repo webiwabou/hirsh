@@ -1,0 +1,81 @@
+/** Pipeline registry types. */
+
+export type ParamType = "string" | "number" | "boolean" | "enum" | "path";
+
+export interface PipelineParam {
+  /** Flag name without "--", e.g. "genome". */
+  name: string;
+  type: ParamType;
+  required: boolean;
+  /** Proposed default value (for optional params or suggestions). */
+  default?: string | number | boolean;
+  /** Plain-language explanation: this is what the LLM uses to know what to ask. */
+  description: string;
+  /** Valid options when type === "enum". */
+  choices?: string[];
+  /**
+   * If the param is covered by building the samplesheet (e.g. "input"), mark it
+   * here so it is not asked as a free-form field in Phase C.
+   */
+  providedBySamplesheet?: boolean;
+}
+
+export interface SamplesheetColumn {
+  name: string;
+  required: boolean;
+  description: string;
+}
+
+export interface SamplesheetSpec {
+  filename: string;
+  description: string;
+  columns: SamplesheetColumn[];
+}
+
+export interface ResultOutput {
+  /** Path relative to outdir. */
+  path: string;
+  description: string;
+  /** Type for the Phase E results interpreter. */
+  kind: "multiqc_html" | "table" | "vcf_dir" | "directory";
+}
+
+export interface PipelineDefinition {
+  /** nf-core identifier, e.g. "nf-core/rnaseq". */
+  name: string;
+  /** Pinned revision passed to `-r`, e.g. "3.14.0". */
+  version: string;
+  /** Short human-readable title. */
+  title: string;
+  /** Which biological question it answers (key for the LLM's semantic matching). */
+  purpose: string;
+  /** Intent hints to help pipeline selection. */
+  useWhen: string[];
+  /** Free-form description of typical organisms. */
+  organisms: string;
+  /** Expected data/sequencing type. */
+  dataType: string;
+  samplesheet: SamplesheetSpec;
+  params: PipelineParam[];
+  profiles: {
+    /** Recommended container profile ("docker" | "singularity"). */
+    recommended: string;
+    hasTestProfile: boolean;
+    /** Test profile name, e.g. "test". Auto-provides input and references. */
+    testProfile?: string;
+  };
+  /**
+   * Rough resource guidance for REAL runs (ignored for the test profile).
+   * Used by the resource-awareness pre-flight in Phase D.
+   */
+  resources?: {
+    recommendedMemoryGB?: number;
+    minMemoryGB?: number;
+    recommendedCpus?: number;
+  };
+  results: {
+    /** Name of the param that defines the output directory (usually "outdir"). */
+    outdirParam: string;
+    outputs: ResultOutput[];
+  };
+}

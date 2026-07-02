@@ -1,0 +1,101 @@
+name: nf-core/sarek
+version: 3.4.0
+title: Variant calling (germline and somatic DNA)
+purpose: >-
+  Detects genetic variants (SNVs, indels, structural variants, CNVs) from DNA
+  sequencing. Covers alignment, GATK best-practices preprocessing, variant
+  calling and annotation. Supports germline and somatic (tumor/normal) analyses.
+useWhen:
+  - The user wants to find mutations, SNPs, indels or variants in DNA.
+  - Mentions "variant calling", "germline", "somatic", "tumor/normal", "WGS", "WES".
+  - DNA sequencing data (whole genome or exome).
+organisms: >-
+  Mostly human (GATK.GRCh38/GRCh37 references), but supports other species with
+  your own FASTA.
+dataType: DNA, short reads (WGS or WES/targeted). Input via FASTQ, BAM or CRAM.
+
+samplesheet:
+  filename: samplesheet.csv
+  description: >-
+    One row per lane/library. For somatic analysis, samples are grouped by
+    patient and status indicated (0 = normal, 1 = tumor). For germline, status 0.
+  columns:
+    - name: patient
+      required: true
+      description: Patient/individual identifier. Groups normal and tumor samples of the same subject.
+    - name: sample
+      required: true
+      description: Sample identifier within the patient.
+    - name: status
+      required: false
+      description: 0 = normal/germline sample, 1 = tumor sample. Required for somatic analysis.
+    - name: lane
+      required: false
+      description: Sequencing lane (for samples multiplexed across several lanes).
+    - name: fastq_1
+      required: true
+      description: Path to the read 1 FASTQ.
+    - name: fastq_2
+      required: false
+      description: Path to the read 2 FASTQ (paired-end).
+
+params:
+  - name: input
+    type: path
+    required: true
+    providedBySamplesheet: true
+    description: Path to the samplesheet.csv with the samples. Built by the agent.
+  - name: outdir
+    type: path
+    required: true
+    description: Directory where results are written.
+  - name: genome
+    type: string
+    required: false
+    default: GATK.GRCh38
+    choices: [GATK.GRCh38, GATK.GRCh37]
+    description: Reference key (genome + GATK resources). An alternative to your own FASTA.
+  - name: tools
+    type: string
+    required: false
+    default: strelka
+    description: >-
+      Comma-separated variant-calling tools. E.g.; strelka, mutect2 (somatic),
+      haplotypecaller (germline), manta, cnvkit. Choose based on the variant type
+      you are after.
+  - name: wes
+    type: boolean
+    required: false
+    default: false
+    description: Enable for exome/targeted data (uses the captured intervals region).
+  - name: step
+    type: enum
+    required: false
+    default: mapping
+    choices: [mapping, markduplicates, prepare_recalibration, recalibrate, variant_calling, annotate]
+    description: Pipeline entry point. mapping starts from FASTQ.
+
+profiles:
+  recommended: docker
+  hasTestProfile: true
+  testProfile: test
+
+# Guidance for REAL runs (ignored for the test profile). BWA/GATK steps on human
+# WGS are memory-hungry.
+resources:
+  recommendedMemoryGB: 32
+  minMemoryGB: 16
+  recommendedCpus: 8
+
+results:
+  outdirParam: outdir
+  outputs:
+    - path: multiqc/multiqc_report.html
+      kind: multiqc_html
+      description: MultiQC report with quality, coverage and alignment metrics.
+    - path: variant_calling
+      kind: vcf_dir
+      description: Directory with the called-variant VCFs, organized by tool and sample.
+    - path: reports
+      kind: directory
+      description: Coverage, duplication and per-sample statistics reports.

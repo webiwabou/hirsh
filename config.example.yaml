@@ -1,0 +1,36 @@
+# Hirsh — example configuration.
+# Copy this file to `config.yaml` (project root) or to `~/.bioagent/config.yaml`.
+# The Anthropic API key is NEVER placed here: it is read from the environment
+# variable named below.
+
+# Active LLM provider: "ollama" | "anthropic"
+provider: ollama
+
+# --- Ollama backend (local server) ---
+ollama:
+  # Ollama server endpoint.
+  host: http://localhost:11434
+  # Model to use (must be pulled: `ollama pull <model>`) and support tool calling.
+  model: llama3.1:8b
+  # Sampling temperature (0 = deterministic).
+  temperature: 0.2
+
+# --- Anthropic backend (Claude) ---
+anthropic:
+  # The API key is read from this environment variable, not from this file.
+  apiKeyEnv: ANTHROPIC_API_KEY
+  model: claude-3-5-haiku-20241022
+  temperature: 0.2
+  maxTokens: 4096
+
+# --- Pipeline execution ---
+execution:
+  # Default container profile: "docker" | "singularity".
+  containerEngine: docker
+  # Base directory where pipelines are launched and results are written.
+  workdir: ./runs
+  # Optional resource caps for real runs (nf-core --max_memory / --max_cpus).
+  # If unset, Hirsh uses the detected machine as the budget and negotiates from
+  # there (run / adapt / advise against). Uncomment to force a ceiling.
+  # maxMemory: 30.GB
+  # maxCpus: 8

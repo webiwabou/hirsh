@@ -1,0 +1,95 @@
+name: nf-core/rnaseq
+version: 3.14.0
+title: RNA-seq (gene expression quantification)
+purpose: >-
+  Processes short-read RNA-seq data: quality control, adapter trimming,
+  alignment/pseudo-alignment and per-gene and per-transcript expression
+  quantification. It is the starting point for differential expression studies
+  (the counts it produces are analyzed afterwards with DE tools).
+useWhen:
+  - The user wants to measure gene or transcript expression from RNA.
+  - Mentions "RNA-seq", "differential expression", "expressed genes", "counts".
+  - Short-read RNA sequencing data (Illumina).
+organisms: >-
+  Any organism with an available genome/annotation (human, mouse, plants, etc.).
+  Use iGenomes keys or your own FASTA+GTF.
+dataType: RNA, short reads (typically Illumina), single- or paired-end.
+
+samplesheet:
+  filename: samplesheet.csv
+  description: >-
+    One row per sequencing library. For paired-end fill fastq_1 and fastq_2; for
+    single-end only fastq_1. The strandedness column accepts "auto" if unknown.
+  columns:
+    - name: sample
+      required: true
+      description: Sample identifier. Rows with the same sample are treated as technical replicates and merged.
+    - name: fastq_1
+      required: true
+      description: Path to the read 1 FASTQ (or the single FASTQ in single-end).
+    - name: fastq_2
+      required: false
+      description: Path to the read 2 FASTQ. Empty for single-end.
+    - name: strandedness
+      required: true
+      description: Library strandedness. Values; forward, reverse, unstranded or auto.
+
+params:
+  - name: input
+    type: path
+    required: true
+    providedBySamplesheet: true
+    description: Path to the samplesheet.csv with the samples. Built by the agent.
+  - name: outdir
+    type: path
+    required: true
+    description: Directory where results are written.
+  - name: genome
+    type: string
+    required: false
+    description: >-
+      iGenomes reference key (e.g. GRCh38 for human, GRCm39 for mouse). An
+      alternative to providing fasta+gtf manually. One of the two is required
+      except with the test profile.
+    choices: [GRCh38, GRCh37, GRCm39, GRCm38, R64-1-1, WBcel235, TAIR10]
+  - name: fasta
+    type: path
+    required: false
+    description: Reference genome FASTA (if not using an iGenomes key).
+  - name: gtf
+    type: path
+    required: false
+    description: Gene annotation GTF (accompanies fasta if not using iGenomes).
+  - name: aligner
+    type: enum
+    required: false
+    default: star_salmon
+    choices: [star_salmon, star_rsem, hisat2]
+    description: >-
+      Alignment and quantification route. star_salmon (default) aligns with STAR
+      and quantifies with Salmon; usually the best general choice.
+
+profiles:
+  recommended: docker
+  hasTestProfile: true
+  testProfile: test
+
+# Guidance for REAL runs (ignored for the test profile). The STAR genome index
+# step is the memory-heavy one for large genomes (e.g. human).
+resources:
+  recommendedMemoryGB: 38
+  minMemoryGB: 24
+  recommendedCpus: 8
+
+results:
+  outdirParam: outdir
+  outputs:
+    - path: multiqc/star_salmon/multiqc_report.html
+      kind: multiqc_html
+      description: Aggregated MultiQC report with quality, alignment and duplication metrics.
+    - path: star_salmon/salmon.merged.gene_counts.tsv
+      kind: table
+      description: Per-gene count matrix (genes x samples), the basis for differential expression analysis.
+    - path: star_salmon/salmon.merged.gene_tpm.tsv
+      kind: table
+      description: Per-gene TPM matrix (expression normalized by length and depth).

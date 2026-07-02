@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+/**
+ * Hirsh — REPL entry point.
+ *
+ * Loads config and the pipeline registry, builds the LLM provider, checks the
+ * environment and drives the conversational loop. Configuration, provider and
+ * environment errors are surfaced as clear messages, never as raw stack traces.
+ */
+import chalk from "chalk";
+import { ConfigError, loadConfig } from "../config/loadConfig.js";
+import type { HirshConfig } from "../config/types.js";
+import { createProvider, ProviderError, type LLMProvider } from "../llm/index.js";
+import { loadRegistry, RegistryError } from "../pipelines/registry.js";
+import { checkEnvironment } from "../execution/envCheck.js";
+import { Agent } from "../conversation/stateMachine.js";
+import {
+  createSession,
+  ExitSignal,
+  PHASE_LABEL,
+  ResetSignal,
+  type Session,
+} from "../conversation/session.js";
+import { TerminalIO } from "./terminalIO.js";
+import { renderWelcome } from "./banner.js";
+
+const HELP = [
+  chalk.bold("Commands"),
+  "  /status   Show the current phase and the context gathered so far.",
+  "  /help     Show this help.",
+  "  /reset    Restart the conversation from scratch.",
+  "  /exit     Quit Hirsh.",
+  "",
+  "At any open prompt, type your answer and press Enter.",
+].join("\n");
+
+function statusText(session: Session, config: HirshConfig, provider: LLMProvider): string {
+  const q = session.query;
+  const lines = [
+    chalk.bold("Session status"),
+    `  Phase: ${PHASE_LABEL[session.phase]}`,
+    `  LLM provider: ${provider.label}`,
+    `  Container engine: ${config.execution.containerEngine}`,
+    "  Context:",
+    `    Organism: ${q.organism ?? "—"}`,
+    `    Data type: ${q.dataType ?? "—"}`,
+    `    Objective: ${q.objective ?? "—"}`,
+    `    Design: ${q.experimentalDesign ?? "—"}`,
+    `  Pipeline: ${session.selectedPipeline?.name ?? "—"}`,
+  ];
+  if (session.command) lines.push(`  Command: nextflow ${session.command.join(" ")}`);
+  return lines.join("\n");
+}
+
+function fatal(message: string): never {
+  process.stderr.write(chalk.red("\n" + message) + "\n");
+  process.exit(1);
+}
+
+async function main(): Promise<void> {
+  // --- Configuration ---
+  let config: HirshConfig;
+  let sourcePath: string | null;
+  try {
+    ({ config, sourcePath } = loadConfig());
+  } catch (err) {
+    if (err instanceof ConfigError) fatal("Configuration error: " + err.message);
+    throw err;
+  }
+
+  // --- Pipeline registry ---
+  let registry;
+  try {
+    registry = loadRegistry();
+  } catch (err) {
+    if (err instanceof RegistryError) fatal("Failed to load pipelines: " + err.message);
+    throw err;
+  }
+
+  // --- LLM provider ---
+  let provider: LLMProvider;
+  try {
+    provider = createProvider(config);
+  } catch (err) {
+    if (err instanceof ProviderError) fatal(err.message);
+    throw err;
+  }
+
+  // --- Environment check (informational; does not block the conversation) ---
+  const env = await checkEnvironment(config.execution.containerEngine);
+  const envLine = env.canExecute
+    ? chalk.green("ready") + chalk.gray(` · ${env.nextflow.version ?? "nextflow"} · ${env.container.name}`)
+    : chalk.yellow("missing tools (see below)");
+
+  // --- Welcome banner ---
+  process.stdout.write(
+    renderWelcome({
+      providerLabel: provider.label,
+      configSource: sourcePath ?? "defaults (no file)",
+      pipelines: registry.map((p) => p.name.split("/").pop() ?? p.name),
+      envLine,
+      cwd: process.cwd(),
+    }),
+  );
+
+  if (!env.canExecute) {
+    process.stdout.write(chalk.yellow("\nMissing software required to run pipelines:\n"));
+    if (!env.nextflow.available) process.stdout.write(chalk.yellow(`  • ${env.nextflow.hint}\n`));
+    if (!env.container.available) process.stdout.write(chalk.yellow(`  • ${env.container.hint}\n`));
+    process.stdout.write(
+      chalk.gray("You can still converse and prepare the command; execution stays blocked until installed.\n"),
+    );
+  }
+
+  // --- LLM provider health check ---
+  try {
+    await provider.healthCheck();
+  } catch (err) {
+    const msg = err instanceof ProviderError ? err.message : String(err);
+    fatal("The LLM provider is not available: " + msg);
+  }
+
+  process.stdout.write("\n");
+
+  // --- Conversational loop ---
+  let session = createSession();
+  const io = new TerminalIO({
+    getStatus: () => statusText(session, config, provider),
+    getHelp: () => HELP,
+  });
+
+  try {
+    for (;;) {
+      session = createSession();
+      const agent = new Agent(provider, config, registry, io);
+      try {
+        await agent.run(session);
+        const again = await io.confirm("\nStart another analysis?", false);
+        if (!again) break;
+      } catch (err) {
+        if (err instanceof ResetSignal) {
+          io.info("\nConversation reset.");
+          continue;
+        }
+        if (err instanceof ExitSignal) break;
+        if (err instanceof ProviderError) {
+          io.warn("\nLLM problem: " + err.message);
+          continue;
+        }
+        throw err;
+      }
+    }
+  } finally {
+    io.close();
+  }
+  process.stdout.write(chalk.cyan("\nSee you!\n"));
+}
+
+main().catch((err) => {
+  process.stderr.write(
+    chalk.red("\nUnexpected error: " + (err instanceof Error ? err.message : String(err))) + "\n",
+  );
+  process.exit(1);
+});

@@ -1,0 +1,33 @@
+# --- Node / TypeScript ---
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+
+# --- Tests ---
+coverage/
+
+# --- Local user configuration (host-specific paths; API keys come from env) ---
+# Commit config.example.yaml instead.
+config.yaml
+config.yml
+config.json
+
+# --- Pipeline runs & composed projects (Hirsh writes these under workdir) ---
+runs/
+
+# --- Nextflow artifacts (in case pipelines are launched from the repo root) ---
+work/
+.nextflow/
+.nextflow.log*
+results/
+results_test/
+.nf-test/
+.nf-test.log
+
+# --- Editor / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
