@@ -266,9 +266,10 @@ compose often.
 ## Development
 
 ```bash
-npm run build      # compile to dist/
-npm test           # run the Vitest suite (resource logic, pair inference, command building, config)
-npm run typecheck  # type-check without emitting
+npm run build       # compile to dist/
+npm test            # run the Vitest suite (resource logic, pair inference, command building, config)
+npm run typecheck   # type-check without emitting
+npm run verify:defs # check pinned pipeline definitions against upstream nextflow_schema.json (network)
 ```
 
 ## Not yet (on the roadmap)

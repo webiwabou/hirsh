@@ -69,8 +69,11 @@ infrastructure intelligence that defines the north star.
 Make every supported pipeline safe to run for real and make its output land as
 *science*.
 
-- 🔵 **Validate definitions against upstream.** Check each pinned pipeline against
-  its real `nextflow_schema.json` so params/defaults never silently drift.
+- ✅ **Validate definitions against upstream.** `npm run verify:defs`
+  (`scripts/verify-definitions.mjs`) fetches each pinned pipeline's real
+  `nextflow_schema.json` and confirms the revision tag exists and every declared
+  param is a real upstream parameter. All three currently pass.
+  - ⬜ Remaining: also diff default values, and run it in CI (network permitting).
 - ✅ **Richer, quantitative interpretation.** Phase E now reads the numbers that
   matter — per-sample library sizes/column totals from count matrices, per-sample
   metrics from MultiQC's `multiqc_general_stats.txt`, and variant counts from VCFs

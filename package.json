@@ -14,7 +14,8 @@
     "dev": "tsx src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:defs": "node scripts/verify-definitions.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
