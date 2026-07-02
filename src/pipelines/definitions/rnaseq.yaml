@@ -89,6 +89,8 @@ resources:
       cpus: 12
       note: builds the STAR index and holds the suffix array in memory
       cappable: false
+      # Skipped when an iGenomes key or a prebuilt STAR index is provided.
+      skipIfParams: [genome, star_index]
     - name: read alignment (STAR)
       memoryGB: 12
       cpus: 12

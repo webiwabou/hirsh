@@ -9,6 +9,7 @@ import * as readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import chalk from "chalk";
 import type { AgentIO } from "../conversation/io.js";
+import { interpretYesNo } from "../conversation/answers.js";
 import { ExitSignal, ResetSignal } from "../conversation/session.js";
 
 export interface TerminalIOHooks {
@@ -75,10 +76,22 @@ export class TerminalIO implements AgentIO {
     for (;;) {
       const answer = await this.ask(question + suffix);
       if (answer === "") return defaultYes;
-      if (/^(y|yes)$/i.test(answer)) return true;
-      if (/^(n|no)$/i.test(answer)) return false;
-      this.warn("Please answer y/n (or use /help).");
+      const yn = interpretYesNo(answer);
+      if (yn !== null) return yn;
+      this.warn("Sorry, I couldn't tell if that was a yes or a no — try again (or /help).");
     }
+  }
+
+  async confirmOrText(
+    question: string,
+    defaultYes = true,
+  ): Promise<{ decision: boolean } | { text: string }> {
+    const suffix = defaultYes ? " [Y/n, or tell me more] " : " [y/N, or tell me more] ";
+    const answer = await this.ask(question + suffix);
+    if (answer === "") return { decision: defaultYes };
+    const yn = interpretYesNo(answer);
+    if (yn !== null) return { decision: yn };
+    return { text: answer };
   }
 
   async withSpinner<T>(label: string, task: () => Promise<T>): Promise<T> {

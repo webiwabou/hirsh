@@ -27,6 +27,9 @@ class ScriptedIO implements AgentIO {
   async confirm(): Promise<boolean> {
     return false;
   }
+  async confirmOrText(): Promise<{ decision: boolean } | { text: string }> {
+    return { decision: false };
+  }
   async withSpinner<T>(_label: string, task: () => Promise<T>): Promise<T> {
     return task();
   }

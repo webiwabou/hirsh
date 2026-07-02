@@ -109,4 +109,20 @@ describe("assessProcesses (per-process model)", () => {
     expect(a.verdict).toBe("refuse");
     expect(a.limitingStep).toBe("genome indexing (STAR)");
   });
+
+  it("skips the indexing floor when a prebuilt index/reference is provided", () => {
+    const withIndex: ProcessResourceHint[] = [
+      { name: "genome indexing (STAR)", memoryGB: 38, cappable: false, skipIfParams: ["genome"] },
+      { name: "read alignment (STAR)", memoryGB: 12, cappable: false },
+    ];
+    // 20 GB: without the index this refuses; with genome provided, indexing is
+    // skipped and alignment (12) fits → ok.
+    const refused = assessProcesses(withIndex, { cpus: 8, memoryGB: 20 });
+    expect(refused.verdict).toBe("refuse");
+
+    const ok = assessProcesses(withIndex, { cpus: 8, memoryGB: 20 }, new Set(["genome"]));
+    expect(ok.verdict).toBe("ok");
+    expect(ok.skippedSteps).toContain("genome indexing (STAR)");
+    expect(ok.limitingStep).toBe("read alignment (STAR)");
+  });
 });

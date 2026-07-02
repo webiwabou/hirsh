@@ -44,6 +44,13 @@ export interface ProcessResourceHint {
    * memory. Defaults to true (assume cappable unless stated).
    */
   cappable?: boolean;
+  /**
+   * Parameters whose presence means this step won't run — e.g. a prebuilt index
+   * or an iGenomes key makes genome indexing unnecessary. When any of these is
+   * provided, the step is excluded from the assessment (its memory floor no
+   * longer applies).
+   */
+  skipIfParams?: string[];
 }
 
 export interface PipelineResourceHints {
@@ -68,6 +75,8 @@ export interface ResourceAssessment {
   caps?: { maxMemory: string; maxCpus: number };
   /** The step driving the verdict, when the per-process model was used. */
   limitingStep?: string;
+  /** Steps excluded because a prebuilt index/reference was provided. */
+  skippedSteps?: string[];
 }
 
 /** Detects the machine's total RAM (GB) and logical CPU count. */
@@ -115,9 +124,10 @@ function round1(n: number): number {
 export function assessResources(
   hints: PipelineResourceHints,
   available: MachineResources,
+  providedParams?: Set<string>,
 ): ResourceAssessment {
   if (hints.processes && hints.processes.length > 0) {
-    return assessProcesses(hints.processes, available);
+    return assessProcesses(hints.processes, available, providedParams);
   }
   const recommended = hints.recommendedMemoryGB;
   const floor = hints.minMemoryGB ?? (recommended ? recommended * 0.6 : undefined);
@@ -179,8 +189,16 @@ function isCappable(p: ProcessResourceHint): boolean {
   return p.cappable !== false;
 }
 
+/** True if a prebuilt index/reference param provided makes this step unnecessary. */
+function isSkipped(p: ProcessResourceHint, provided?: Set<string>): boolean {
+  if (!p.skipIfParams || !provided) return false;
+  return p.skipIfParams.some((name) => provided.has(name));
+}
+
 /**
  * Per-process assessment: compares each heavy step against the memory budget.
+ * Steps made unnecessary by a provided index/reference (`skipIfParams`) are
+ * excluded first — a prebuilt genome index removes the indexing memory floor.
  *   - A step that exceeds the budget and can't be capped (hard floor, e.g. genome
  *     indexing) → refuse, naming that step.
  *   - Only cappable steps exceed the budget → adapt (cap and warn they'll be
@@ -190,16 +208,33 @@ function isCappable(p: ProcessResourceHint): boolean {
 export function assessProcesses(
   processes: ProcessResourceHint[],
   available: MachineResources,
+  providedParams?: Set<string>,
 ): ResourceAssessment {
   const budget = available.memoryGB;
-  const peak = peakProcess(processes);
-  const overflow = processes.filter((p) => p.memoryGB > budget);
+  const skippedSteps = processes.filter((p) => isSkipped(p, providedParams)).map((p) => p.name);
+  const active = processes.filter((p) => !isSkipped(p, providedParams));
+
+  // Everything skipped (or nothing declared active): nothing heavy left to run.
+  if (active.length === 0) {
+    return {
+      verdict: "ok",
+      available,
+      skippedSteps,
+      message:
+        `This machine has about ${available.memoryGB} GB of RAM and ${available.cpus} CPUs. ` +
+        "The heaviest steps are skipped because a prebuilt reference/index was provided.",
+    };
+  }
+
+  const peak = peakProcess(active);
+  const overflow = active.filter((p) => p.memoryGB > budget);
 
   if (overflow.length === 0) {
     return {
       verdict: "ok",
       available,
       limitingStep: peak.name,
+      skippedSteps,
       message:
         `This machine has about ${available.memoryGB} GB of RAM and ${available.cpus} CPUs, ` +
         `which covers every heavy step — the largest, ${peak.name}, needs about ${peak.memoryGB} GB.`,
@@ -216,6 +251,7 @@ export function assessProcesses(
       verdict: "refuse",
       available,
       limitingStep: worst.name,
+      skippedSteps,
       message:
         `The ${worst.name} step needs about ${worst.memoryGB} GB of RAM${
           worst.note ? ` — ${worst.note}` : ""
@@ -231,6 +267,7 @@ export function assessProcesses(
     verdict: "adapt",
     available,
     limitingStep: worst.name,
+    skippedSteps,
     message:
       `Most steps fit, but ${worst.name} would like about ${worst.memoryGB} GB and this machine has ` +
       `around ${available.memoryGB} GB. That step's memory can be capped, so I can cap Nextflow to ` +

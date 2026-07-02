@@ -38,6 +38,11 @@ The MVP: understand intent → select one of a curated set of nf-core pipelines 
 parameterize → confirm → run → interpret.
 
 - ✅ Conversational flow (intent → selection → params → confirm → run → interpret)
+  - ✅ Confirmations understand natural language, not just a strict `y/n`: common
+    phrasings ("sure", "nope", "go ahead", "sí") are accepted, and at the pipeline
+    choice the user can answer in free text ("actually it's paired-end WGS") to have
+    Hirsh fold that back into the intent and reconsider (`conversation/answers.ts`,
+    `confirmOrText`).
 - ✅ Swappable LLM backends (Ollama, Anthropic) behind one interface
 - ✅ Extensible pipeline registry (rnaseq, sarek, proteinfamilies)
 - ✅ Samplesheet construction with FASTQ pair inference
@@ -121,8 +126,12 @@ the heart of the "no technical knowledge required" promise.
   needs ~38 GB and can't be reduced) instead of vaguely "adapting"
   (`assessProcesses` in `execution/resources.ts`, unit-tested; declared for rnaseq
   and sarek). Falls back to the whole-pipeline model when no steps are declared.
-  - ⬜ Remaining: skip the indexing floor when a prebuilt index/genome is provided,
-    and read real per-process peaks from Nextflow trace/execution reports.
+  A step can also declare `skipIfParams`: when the user supplies a prebuilt
+  index/reference (or an iGenomes key), that step's memory floor is dropped from
+  the assessment — so rnaseq on a 30 GB machine *refuses* when it must build the
+  index but is *fine* when `--genome`/a STAR index is provided.
+  - ⬜ Remaining: read real per-process peaks from Nextflow trace/execution reports
+    instead of curated estimates.
 - ⬜ **Executor abstraction.** Run locally, on HPC schedulers (Slurm/SGE) or in the
   cloud (AWS Batch, Azure, GCP) by choosing profiles and executors — the scientist
   just says "run it on the cluster".

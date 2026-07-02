@@ -82,6 +82,8 @@ export interface PipelineDefinition {
       cpus?: number;
       note?: string;
       cappable?: boolean;
+      /** Params whose presence skips this step (e.g. a prebuilt index). */
+      skipIfParams?: string[];
     }>;
   };
   results: {

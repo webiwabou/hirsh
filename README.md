@@ -155,6 +155,11 @@ Special commands during the conversation:
 | `/reset`  | Restart the conversation from scratch.          |
 | `/exit`   | Quit Hirsh.                                      |
 
+Confirmations are conversational: besides `y`/`n` you can answer naturally
+("sure", "nope", "go ahead"), and at the pipeline choice you can reply in plain
+language (e.g. "actually it's paired-end WGS") to have Hirsh reconsider instead
+of just accepting or rejecting.
+
 ### Example session
 
 ```
@@ -167,7 +172,7 @@ What bioinformatics analysis would you like to run?
 I suggest nf-core/rnaseq — RNA-seq (gene expression quantification).
 It is designed for short-read RNA: QC, alignment and quantification,
 the basis for differential expression.
-Continue with nf-core/rnaseq? [Y/n] › y
+Continue with nf-core/rnaseq? (yes, no, or tell me what to change) › yes
 
 ── Phase C · Parameterization ──
 The test profile runs the pipeline with bundled test data...

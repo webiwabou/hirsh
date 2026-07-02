@@ -116,34 +116,58 @@ export class Agent {
     session.phase = "select";
     this.io.heading("Phase B · Pipeline selection");
 
-    const sel = await this.io.withSpinner("Choosing the right pipeline", () =>
-      selectPipeline(this.provider, this.registry, session.query),
-    );
+    // The user can accept, decline, or answer in natural language ("actually
+    // it's paired-end WGS") — in which case we fold that back into the intent and
+    // reconsider, rather than forcing a bare yes/no.
+    for (let round = 0; round < 4; round++) {
+      const sel = await this.io.withSpinner("Choosing the right pipeline", () =>
+        selectPipeline(this.provider, this.registry, session.query),
+      );
 
-    const chosen = sel.pipelineName
-      ? this.registry.find((p) => p.name === sel.pipelineName) ?? null
-      : null;
+      const chosen = sel.pipelineName
+        ? this.registry.find((p) => p.name === sel.pipelineName) ?? null
+        : null;
 
-    if (!chosen) {
-      this.io.warn("I couldn't find a curated pipeline that fits your case well: " + sel.rationale);
-      const compose = await this.io.confirm(
-        "Would you like me to compose one from nf-core modules instead?",
+      if (!chosen) {
+        this.io.warn("I couldn't find a curated pipeline that fits your case well: " + sel.rationale);
+        const compose = await this.io.confirm(
+          "Would you like me to compose one from nf-core modules instead?",
+          true,
+        );
+        if (compose) return { kind: "compose" };
+        return this.pickManually(session);
+      }
+
+      this.io.say(`I suggest ${chosen.name} — ${chosen.title}.`);
+      this.io.info(sel.rationale);
+      if (chosen.followUp) {
+        this.io.info(`Heads-up: ${chosen.followUp.note}`);
+      }
+
+      const resp = await this.io.confirmOrText(
+        `Continue with ${chosen.name}? (yes, no, or tell me what to change)`,
         true,
       );
-      if (compose) return { kind: "compose" };
-      return this.pickManually(session);
+      if ("decision" in resp) {
+        if (resp.decision) return { kind: "pipeline", pipeline: chosen };
+        return this.pickManually(session);
+      }
+
+      // Free-text answer → treat as a clarification and re-decide.
+      session.transcript.push({ role: "user", text: resp.text });
+      const refined = await this.io.withSpinner("Reconsidering based on that", () =>
+        extractIntent(this.provider, this.registry, session.transcript),
+      );
+      session.query = {
+        organism: refined.organism ?? session.query.organism,
+        dataType: refined.dataType ?? session.query.dataType,
+        objective: refined.objective ?? session.query.objective,
+        experimentalDesign: refined.experimentalDesign ?? session.query.experimentalDesign,
+      };
     }
 
-    this.io.say(`I suggest ${chosen.name} — ${chosen.title}.`);
-    this.io.info(sel.rationale);
-    if (chosen.followUp) {
-      this.io.info(`Heads-up: ${chosen.followUp.note}`);
-    }
-    const ok = await this.io.confirm(`Continue with ${chosen.name}?`, true);
-    if (!ok) {
-      return this.pickManually(session);
-    }
-    return { kind: "pipeline", pipeline: chosen };
+    // Exhausted the reconsideration rounds — fall back to a manual pick.
+    return this.pickManually(session);
   }
 
   /** Lets the user pick manually from the catalog, compose, or give up. */
@@ -283,18 +307,30 @@ export class Agent {
     if (session.useTestProfile || !pipeline.resources) return true;
 
     const available = this.availableBudget();
-    const assessment = assessResources(pipeline.resources, available);
+    // Params the user actually provided (non-empty) — a prebuilt index/reference
+    // lets the model skip the corresponding indexing step's memory floor.
+    const providedParams = new Set(
+      Object.entries(session.paramValues)
+        .filter(([, v]) => v !== "" && v != null)
+        .map(([k]) => k),
+    );
+    const assessment = assessResources(pipeline.resources, available, providedParams);
 
     // When per-process guidance exists, show which steps fit under the budget so
     // the verdict is transparent, not a single opaque number.
     const processes = pipeline.resources.processes;
     if (processes && processes.length > 0) {
-      this.io.info(
-        `Heavy steps vs. your ${Math.floor(available.memoryGB)} GB budget:`,
-      );
+      const skipped = new Set(assessment.skippedSteps ?? []);
+      this.io.info(`Heavy steps vs. your ${Math.floor(available.memoryGB)} GB budget:`);
       for (const p of [...processes].sort((a, b) => b.memoryGB - a.memoryGB)) {
-        const fits = p.memoryGB <= available.memoryGB;
-        const mark = fits ? "fits" : p.cappable === false ? "WON'T FIT (hard floor)" : "over budget (cappable)";
+        let mark: string;
+        if (skipped.has(p.name)) {
+          mark = "skipped (reference/index provided)";
+        } else if (p.memoryGB <= available.memoryGB) {
+          mark = "fits";
+        } else {
+          mark = p.cappable === false ? "WON'T FIT (hard floor)" : "over budget (cappable)";
+        }
         this.io.info(`  • ${p.name}: ~${p.memoryGB} GB — ${mark}`);
       }
     }

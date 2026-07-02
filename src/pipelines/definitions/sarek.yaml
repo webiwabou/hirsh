@@ -95,6 +95,8 @@ resources:
       cpus: 8
       note: builds the BWA-MEM2 index, which must be held in memory
       cappable: false
+      # Skipped when an iGenomes key or a prebuilt BWA/BWA-MEM2 index is provided.
+      skipIfParams: [genome, bwa, bwamem2]
     - name: read alignment (BWA-MEM2)
       memoryGB: 16
       cpus: 12

@@ -16,8 +16,17 @@ export interface AgentIO {
   heading(text: string): void;
   /** Open question; returns the user's answer (text). */
   ask(question: string): Promise<string>;
-  /** Yes/no confirmation. */
+  /** Yes/no confirmation (accepts natural-language yes/no phrasings). */
   confirm(question: string, defaultYes?: boolean): Promise<boolean>;
+  /**
+   * Like confirm, but a natural-language answer that isn't a clear yes/no is
+   * returned as free text so the caller can act on it (e.g. a redirect). Empty
+   * input takes the default decision.
+   */
+  confirmOrText(
+    question: string,
+    defaultYes?: boolean,
+  ): Promise<{ decision: boolean } | { text: string }>;
   /** Writes a chunk without a newline (for streaming LLM tokens). */
   raw(chunk: string): void;
   /** Closes the current streaming line with a newline. */

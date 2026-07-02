@@ -32,6 +32,7 @@ src/
 ├── conversation/     state machine (Phases A–E)
 │   ├── session.ts    in-memory state + Reset/Exit signals
 │   ├── io.ts         AgentIO interface (decouples the flow from the terminal frontend)
+│   ├── answers.ts    lenient natural-language yes/no interpretation for confirmations
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
