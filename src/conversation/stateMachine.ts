@@ -10,6 +10,12 @@ import type { HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
+import {
+  BACKENDS,
+  bootstrapNextflow,
+  chooseBackend,
+  detectBackends,
+} from "../execution/environment.js";
 import { runNextflow } from "../execution/runner.js";
 import {
   assessResources,
@@ -315,12 +321,40 @@ export class Agent {
     return true;
   }
 
+  /**
+   * Phase 3 — interactive execution-backend selection. Detects which backends
+   * are available and lets the user confirm/switch; records the choice on the
+   * session so the command profile and provenance reflect it.
+   */
+  private async phaseEnvironment(session: Session): Promise<void> {
+    const statuses = await this.io.withSpinner("Checking execution backends", () =>
+      detectBackends(),
+    );
+    const chosen = await chooseBackend(this.io, statuses, this.config.execution.containerEngine);
+    if (chosen) {
+      session.engine = chosen;
+      this.io.info(
+        `Execution backend: ${BACKENDS[chosen].label} (nf-core profile "${BACKENDS[chosen].profile}").`,
+      );
+    } else {
+      // Nothing available: keep the configured value so the command/provenance
+      // stay coherent; the environment gate below will explain what's missing.
+      session.engine = this.config.execution.containerEngine;
+    }
+  }
+
   /** Phase D — show the command, check the environment and run after confirmation. */
   private async phaseConfirmAndRun(session: Session, runDir: string): Promise<boolean> {
     session.phase = "confirm";
     this.io.heading("Phase D · Confirmation and execution");
 
     const pipeline = session.selectedPipeline!;
+
+    // Phase 3: decide the execution backend (Docker/Singularity/Conda/Mamba)
+    // interactively, based on what's actually available, before building the
+    // command so the -profile reflects the choice.
+    await this.phaseEnvironment(session);
+
     const proceed = await this.phaseResourceCheck(session, pipeline);
     if (!proceed) return false;
 
@@ -342,7 +376,15 @@ export class Agent {
     }
     this.io.info(`Working directory: ${runDir}`);
 
-    const env = await checkEnvironment(this.config.execution.containerEngine);
+    const engine = session.engine ?? this.config.execution.containerEngine;
+    let env = await checkEnvironment(engine);
+    // Phase 3: if Nextflow itself is missing, offer to bootstrap it (with
+    // confirmation) rather than only printing install instructions.
+    if (!env.nextflow.available) {
+      const boot = await bootstrapNextflow(this.io);
+      this.io.info(boot.message);
+      if (boot.installed) env = await checkEnvironment(engine);
+    }
     if (!env.canExecute) {
       this.io.warn("I can't run yet because required software is missing:");
       if (!env.nextflow.available) this.io.warn(`  • ${env.nextflow.hint}`);
@@ -401,7 +443,7 @@ export class Agent {
         samplesheet: session.samplesheetPath,
         outdir: session.outdir,
         nextflowVersion: env.nextflow.version,
-        containerEngine: this.config.execution.containerEngine,
+        containerEngine: session.engine ?? this.config.execution.containerEngine,
         machine: detectMachine(),
         llmLabel: this.provider.label,
         executed,

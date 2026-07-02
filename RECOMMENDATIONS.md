@@ -124,15 +124,21 @@ the heart of the "no technical knowledge required" promise.
   feasibility** for each, and a clear recommendation.
 - ⬜ **Container & data staging.** Manage image pulls (Docker/Singularity/Apptainer),
   cache locations, and staging of large inputs; detect and explain disk pressure.
-- ⬜ **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
-  what's missing and — with explicit confirmation — install it: Nextflow (plus a
-  compatible Java), and the chosen execution backend. Today Hirsh only *detects* the
-  toolchain and prints install instructions; it should be able to set it up itself.
-- ⬜ **Interactive environment selection.** Decide the execution backend through a
-  short Q&A — **Docker, Singularity/Apptainer, or Conda/Mamba** — check what's
-  available, install/enable the choice, and set the matching Nextflow profile,
-  instead of relying on a single `containerEngine` config value. (Conda/Mamba is not
-  a supported backend yet.)
+- 🔵 **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
+  what's missing and — with explicit confirmation — install it. Nextflow is now
+  self-installable: when it's absent, Hirsh offers to run the official installer
+  (checking for Java first) and place the binary on PATH, instead of only printing
+  instructions (`execution/environment.ts::bootstrapNextflow`).
+  - ⬜ Remaining: install the chosen execution backend itself (Docker/Conda), and a
+    compatible Java when missing — today these are still detect-and-guide.
+- ✅ **Interactive environment selection.** Before each run Hirsh detects which
+  backends are actually available — **Docker, Singularity/Apptainer, Conda or
+  Mamba** — recommends the most reproducible one present (keeping the configured
+  default if available), and lets the scientist confirm or switch in a short Q&A;
+  the choice sets the matching nf-core profile and is recorded in provenance
+  (`execution/environment.ts`, unit-tested). Conda/Mamba are now supported backends.
+  - ⬜ Remaining: persist the choice back to config, and gate on Docker daemon
+    reachability (not just the CLI being present).
 
 ## Phase 4 — Composing pipelines from nf-core building blocks ✅ (runnable; refinements remain)
 
@@ -236,7 +242,7 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Selects the right existing pipeline
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - ⬜ Negotiates compute (adapt / relocate / provision) with cost & time estimates
-- ⬜ Sets up its own toolchain & environment (installs Nextflow, picks Docker/Conda/…)
+- 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
 - ⬜ Runs on laptop, HPC and cloud transparently
 - ⬜ Composes pipelines that mix nf-core modules with the scientist's own tools
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)

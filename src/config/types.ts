@@ -1,7 +1,12 @@
 /** Hirsh configuration types. */
 
 export type ProviderName = "ollama" | "anthropic";
-export type ContainerEngine = "docker" | "singularity";
+/**
+ * Execution backend for Nextflow. "docker"/"singularity" are container engines;
+ * "conda"/"mamba" resolve tools into environments instead of containers. Each
+ * maps to the matching nf-core profile name.
+ */
+export type ContainerEngine = "docker" | "singularity" | "conda" | "mamba";
 
 export interface OllamaConfig {
   host: string;

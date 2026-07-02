@@ -61,7 +61,19 @@ async function checkContainer(engine: ContainerEngine): Promise<ToolStatus> {
       available: false,
       hint:
         "Singularity/Apptainer was not found on PATH. Install it (https://apptainer.org/) " +
-        'or set execution.containerEngine to "docker" in your config.',
+        'or choose another backend (e.g. "docker" or "conda").',
+    };
+  }
+
+  if (engine === "conda" || engine === "mamba") {
+    const res = await which(engine, ["--version"]);
+    if (res.ok) return { name: engine, available: true, version: res.out };
+    return {
+      name: engine,
+      available: false,
+      hint:
+        `${engine} is not on PATH. Install Conda/Mamba (Miniforge: ` +
+        "https://github.com/conda-forge/miniforge) or choose a container backend.",
     };
   }
 
@@ -72,7 +84,7 @@ async function checkContainer(engine: ContainerEngine): Promise<ToolStatus> {
     available: false,
     hint:
       "Docker is not on PATH. Install it (https://docs.docker.com/get-docker/) and make sure " +
-      'the daemon is running, or set execution.containerEngine to "singularity".',
+      'the daemon is running, or choose another backend (e.g. "singularity" or "conda").',
   };
 }
 

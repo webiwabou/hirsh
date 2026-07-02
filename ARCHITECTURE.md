@@ -37,7 +37,8 @@ src/
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
-│   ├── envCheck.ts   verifies nextflow and docker/singularity on PATH
+│   ├── envCheck.ts   verifies nextflow + the chosen backend (docker/singularity/conda/mamba) on PATH
+│   ├── environment.ts  detects backends, interactive selection, Nextflow bootstrap (Phase 3)
 │   ├── resources.ts  machine detection + memory/CPU assessment (ok/adapt/refuse)
 │   ├── samplesheet.ts  FASTQ scanning, pair inference, CSV writing
 │   └── runner.ts     spawns `nextflow`, streams stdout/stderr, forwards SIGINT

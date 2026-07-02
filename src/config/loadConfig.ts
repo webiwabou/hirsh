@@ -149,9 +149,11 @@ function mergeExecution(value: unknown): ExecutionConfig {
   if (value === undefined) return { ...DEFAULT_EXECUTION };
   if (!isRecord(value)) throw new ConfigError('The "execution" section must be a map.');
   const engine = value.containerEngine;
-  if (engine !== undefined && engine !== "docker" && engine !== "singularity") {
+  const validEngines = ["docker", "singularity", "conda", "mamba"];
+  if (engine !== undefined && !validEngines.includes(engine as string)) {
     throw new ConfigError(
-      `Invalid execution.containerEngine: "${String(engine)}". Use "docker" or "singularity".`,
+      `Invalid execution.containerEngine: "${String(engine)}". ` +
+        `Use one of: ${validEngines.join(", ")}.`,
     );
   }
   return {

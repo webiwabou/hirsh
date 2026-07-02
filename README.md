@@ -29,17 +29,21 @@ explicit confirmation) and explains the results in plain language.
 ## Requirements
 
 - **Node.js ≥ 20** (tested on Node 26).
-- **Nextflow** on `PATH` — required to run pipelines.
-  Install: `curl -s https://get.nextflow.io | bash`.
-- **Docker** or **Singularity/Apptainer** — container engine for the pipelines.
+- **Nextflow** on `PATH` — required to run pipelines. If it's missing, Hirsh can
+  install it for you (official installer) with your confirmation, or you can
+  install it yourself: `curl -s https://get.nextflow.io | bash`.
+- An **execution backend** — **Docker**, **Singularity/Apptainer**, **Conda** or
+  **Mamba**. Before a run Hirsh detects which of these are available and lets you
+  pick one interactively (recommending the most reproducible option present).
 - An **LLM backend**:
   - **Ollama** running locally (`ollama serve`) with a tool-calling capable model
     pulled (`ollama pull <model>`), **or**
   - an **Anthropic API key** in an environment variable.
 
-Hirsh checks Nextflow and the container engine at startup. If they are missing it
-tells you, with instructions, and **does not run** pipelines — but you can still
-converse and prepare the command.
+Hirsh checks Nextflow and the execution backend at startup and again before a
+run. If something is missing it tells you (and offers to install Nextflow), and
+**does not run** pipelines until it's resolved — but you can still converse and
+prepare the command.
 
 ## Installation
 
@@ -102,7 +106,8 @@ ollama:
   model: llama3.1:8b        # must be pulled and support tool calling
   temperature: 0.2
 execution:
-  containerEngine: docker   # or "singularity"
+  containerEngine: docker   # default backend: docker | singularity | conda | mamba
+                            # (you can switch interactively before each run)
   workdir: ./runs
   # Optional resource caps for real runs (nf-core --max_memory / --max_cpus).
   # If unset, Hirsh uses the detected machine as the budget.

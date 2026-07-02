@@ -15,7 +15,7 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import type { HirshConfig } from "../config/types.js";
+import type { ContainerEngine, HirshConfig } from "../config/types.js";
 import type { PipelineDefinition, PipelineParam } from "../pipelines/types.js";
 import type { AgentIO } from "./io.js";
 import type { Session } from "./session.js";
@@ -334,12 +334,13 @@ export function buildRunArgs(
   config: HirshConfig,
   useTestProfile: boolean,
   paramsFilePath: string,
+  engine?: ContainerEngine,
 ): string[] {
   const profiles: string[] = [];
   if (useTestProfile && pipeline.profiles.testProfile) {
     profiles.push(pipeline.profiles.testProfile);
   }
-  profiles.push(config.execution.containerEngine);
+  profiles.push(engine ?? config.execution.containerEngine);
   return [
     "run",
     pipeline.name,
@@ -367,5 +368,5 @@ export function finalizeCommand(
   const obj = buildParamsObject(session, config);
   writeFileSync(paramsPath, stringifyYaml(obj), "utf8");
   session.paramsFile = paramsPath;
-  session.command = buildRunArgs(pipeline, config, session.useTestProfile, paramsPath);
+  session.command = buildRunArgs(pipeline, config, session.useTestProfile, paramsPath, session.engine);
 }

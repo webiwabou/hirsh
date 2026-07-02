@@ -1,5 +1,6 @@
 /** Conversational session state (in memory; no persistence in Phase 1). */
 import type { PipelineDefinition } from "../pipelines/types.js";
+import type { ContainerEngine } from "../config/types.js";
 
 export type Phase =
   | "intent" // Phase A — understand the intent
@@ -50,6 +51,8 @@ export interface Session {
   runDir?: string;
   /** Path to the generated -params-file (params.yaml). */
   paramsFile?: string;
+  /** Execution backend chosen interactively (overrides the configured one). */
+  engine?: ContainerEngine;
 }
 
 export function createSession(): Session {
