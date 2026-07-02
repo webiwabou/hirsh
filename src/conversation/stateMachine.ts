@@ -49,7 +49,10 @@ import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
 import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
+import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
 import type { ResolvedComposition } from "../composition/types.js";
+import { initAndCommit, isGitAvailable } from "../execution/git.js";
+import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand } from "./parameterFilling.js";
 import { selectPipeline } from "./pipelineSelection.js";
@@ -321,6 +324,9 @@ export class Agent {
       this.io.info(validation.nfCoreCli.note);
     }
 
+    // Phase 5: optional standards-compliant packaging and assisted publishing.
+    await this.phasePackaging(result.dir, resolved, validation.nfCoreCli.available);
+
     this.io.say("\nNext steps:");
     this.io.info(`  • Real run: cd ${result.dir} && nextflow run . -profile docker --input samplesheet.csv --outdir results`);
     if (result.referenceParams.length > 0) {
@@ -357,6 +363,111 @@ export class Agent {
         }
       }
       add = await this.io.confirm("Add another custom tool?", false);
+    }
+  }
+
+  /**
+   * Phase 5 — standards-compliant packaging and (opt-in) assisted publishing.
+   * Adds the files a full nf-core template carries (LICENSE, CHANGELOG, code of
+   * conduct, CI, docs, manifest author/homePage), turns the project into a git
+   * repo, re-runs lint to show the improvement, and — only with explicit
+   * confirmation — creates and pushes a GitHub repository (defaulting to private).
+   */
+  private async phasePackaging(
+    dir: string,
+    resolved: ResolvedComposition,
+    nfCoreAvailable: boolean,
+  ): Promise<void> {
+    const pkg = await this.io.confirm(
+      "Package this to nf-core standards (LICENSE, CHANGELOG, CI, docs)?",
+      false,
+    );
+    if (!pkg) return;
+
+    const author = (await this.io.ask("Author/maintainer name (for LICENSE and manifest):")).trim() || "Anonymous";
+    const homePage = (await this.io.ask("GitHub 'owner/repo' or homepage URL (blank to skip):")).trim();
+    const spec: PackageSpec = {
+      pipelineName: resolved.plan.pipelineName,
+      author,
+      homePage: homePage || undefined,
+      description: resolved.plan.description,
+    };
+
+    const res = packagePipeline(dir, spec);
+    this.io.info(
+      `Added ${res.files.length} packaging files (LICENSE=MIT, CHANGELOG, CODE_OF_CONDUCT, CI, docs)` +
+        (res.manifestPatched ? " and filled in the manifest author/homePage." : "."),
+    );
+
+    // Make it a real repository (also stops nf-core lint failing for "not a repo").
+    if (await isGitAvailable()) {
+      const git = await this.io.withSpinner("Initializing git repository", () =>
+        initAndCommit(dir, "Initial pipeline scaffold composed by Hirsh"),
+      );
+      if (git.ok) this.io.info("Initialized a git repository with an initial commit.");
+      else this.io.warn("Could not initialize git: " + (git.error ?? "unknown error"));
+    } else {
+      this.io.info("git not found — skipping repository initialization.");
+    }
+
+    // Re-run lint to show the packaging improved the score.
+    if (nfCoreAvailable) {
+      const lint = await this.io.withSpinner("Re-running nf-core lint after packaging", () =>
+        lintPipeline(dir),
+      );
+      if (lint.ran && lint.failed != null) {
+        this.io.info(
+          `nf-core lint (after packaging): ${lint.passed ?? 0} passed, ${lint.warned ?? 0} warnings, ${lint.failed} failed.`,
+        );
+      }
+    }
+
+    await this.offerPublish(dir, resolved);
+  }
+
+  /** Assisted GitHub publishing — strictly opt-in, defaulting to a private repo. */
+  private async offerPublish(dir: string, resolved: ResolvedComposition): Promise<void> {
+    const wants = await this.io.confirm("Publish this pipeline to a GitHub repository?", false);
+    if (!wants) {
+      this.io.info("Not publishing. The project is ready locally whenever you want to share it.");
+      return;
+    }
+
+    const gh = await checkGhCli();
+    if (!gh.installed || !gh.authenticated) {
+      this.io.warn(gh.note ?? "GitHub CLI is not usable.");
+      return;
+    }
+
+    const name = (await this.io.ask(`Repository name [${resolved.plan.pipelineName}]:`)).trim() ||
+      resolved.plan.pipelineName;
+    const makePublic = await this.io.confirm(
+      "Make the repository PUBLIC? (No = private, recommended)",
+      false,
+    );
+    const visibility = makePublic ? "public" : "private";
+
+    if (makePublic) {
+      this.io.warn(
+        "A public repository is visible to everyone and may be indexed/cached even if later deleted.",
+      );
+    }
+    const confirm = await this.io.confirm(
+      `Create and push a ${visibility} GitHub repo "${name}" now?`,
+      false,
+    );
+    if (!confirm) {
+      this.io.info("Cancelled — nothing was published.");
+      return;
+    }
+
+    const result = await this.io.withSpinner("Creating and pushing the GitHub repository", () =>
+      createGitHubRepo(dir, { name, visibility, description: resolved.plan.description }),
+    );
+    if (result.ok) {
+      this.io.say(`Published: ${result.url ?? "(repository created)"}`);
+    } else {
+      this.io.warn("Publishing failed: " + (result.error ?? "unknown error"));
     }
   }
 

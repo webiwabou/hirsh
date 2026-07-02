@@ -232,22 +232,32 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   - ⬜ Remaining: let the LLM *propose* local tools from intent (today they're
     gathered interactively), multi-input local modules, and per-tool test data.
 
-## Phase 5 — Contributing back to the community
+## Phase 5 — Contributing back to the community 🔵 (packaging + publishing shipped)
 
 When Hirsh builds something new and good, it should help share it — turning a
 one-off analysis into reusable, community-grade software.
 
-- ⬜ **Standards-compliant packaging** of a novel module or subworkflow via the
-  nf-core template, with metadata, tests and documentation generated.
-- ⬜ **Local quality gate.** Run `nf-core lint` and `nf-test` and iterate until green.
+- ✅ **Standards-compliant packaging.** With explicit opt-in, Hirsh adds the files a
+  full nf-core template carries and that lint flags as missing — `LICENSE` (MIT by
+  default), `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `.gitignore`, a CI workflow, and
+  `docs/usage.md` + `docs/output.md` — and fills in the `nextflow.config` manifest
+  (author/homePage). It then `git init`s the project with an initial commit (which
+  also stops lint failing for "not a git repository") and re-runs lint to show the
+  improvement (`composition/packaging.ts` + `execution/git.ts`, unit-tested; the
+  patched config verified to still parse).
+  - ⬜ Remaining: generated `nf-test` tests and full-size `test`/`test_full` data.
+- 🔵 **Local quality gate.** `nf-core lint` runs in the composition loop and after
+  packaging (Phase 4); iterating fixes automatically until green is still to do.
 - ⬜ **Assisted contribution.** Draft a module/subworkflow proposal and open a PR to
   nf-core/modules (or the relevant pipeline) — always with explicit human review
   and consent before anything is published.
-- ⬜ **Publish a whole pipeline.** Beyond single modules: take a composed pipeline to
-  full nf-core standards using the pipeline template (docs, CI, `nextflow_schema.json`,
-  full-size `test`/`test_full` data, `CHANGELOG`, licence, code of conduct), get
-  `nf-core pipelines lint` green, and — with explicit consent — create and push a
-  **public GitHub repository**.
+- ✅ **Publish a whole pipeline.** With explicit, double confirmation and defaulting
+  to **private**, Hirsh creates and pushes a GitHub repository via the `gh` CLI
+  (`execution/publish.ts`). It warns plainly that a public repo is visible and may
+  be indexed/cached, checks `gh auth`, and never publishes without consent; it does
+  not handle credentials itself.
+  - ⬜ Remaining: reach a green `nf-core pipelines lint` and bundle full-size test
+    data before recommending publication.
 - ⬜ **nf-core inclusion guidance.** Walk the scientist through the community process
   to have a published pipeline adopted into nf-core (requirements, naming, the
   request/review steps), being honest that acceptance is a community decision the
@@ -295,5 +305,5 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Composes pipelines that mix nf-core modules with the scientist's own tools (generated modules/local/ + nf-core, runs via stub)
 - ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
-- ⬜ Contributes novel, standards-compliant modules and pipelines back to nf-core
+- 🔵 Contributes novel, standards-compliant modules and pipelines back to nf-core (packages + publishes to GitHub today; nf-core/modules PRs and inclusion next)
 - ⬜ Requires zero Nextflow/infra knowledge from the scientist

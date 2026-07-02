@@ -318,6 +318,20 @@ reported as `--<name>` for you to supply on a real run.
 Set `GITHUB_TOKEN` in your environment to raise GitHub's API rate limit if you
 compose often.
 
+### Packaging & publishing
+
+After composing, Hirsh can (opt-in) **package the project to nf-core standards**:
+it adds a `LICENSE` (MIT by default), `CHANGELOG.md`, `CODE_OF_CONDUCT.md`,
+`.gitignore`, a CI workflow and `docs/`, fills in the `nextflow.config` manifest
+(author/homePage), turns the project into a git repository, and re-runs
+`nf-core lint` to show the improved score.
+
+It can then **publish to GitHub** via the `gh` CLI — but only with explicit
+confirmation, **defaulting to a private repository**, warning clearly that a
+public repo is visible and may be indexed/cached even if later deleted. Hirsh
+never publishes without your consent and doesn't handle credentials itself
+(`gh auth login` does).
+
 ## Development
 
 ```bash

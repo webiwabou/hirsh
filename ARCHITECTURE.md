@@ -43,6 +43,8 @@ src/
 │   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
 │   ├── negotiation.ts  infrastructure alternatives (cap/cluster/cloud) with rough time/cost/feasibility (Phase 3)
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)
+│   ├── git.ts        git init + initial commit for a generated project (Phase 5)
+│   ├── publish.ts    assisted GitHub publishing via `gh` (opt-in, private by default) (Phase 5)
 │   ├── resources.ts  machine detection + whole-pipeline and per-process memory assessment (ok/adapt/refuse)
 │   ├── samplesheet.ts  FASTQ scanning, pair inference, CSV writing
 │   └── runner.ts     spawns `nextflow`, streams stdout/stderr, forwards SIGINT
@@ -55,6 +57,7 @@ src/
 │   ├── wiring.ts     channel-type matcher → runnable DSL2 workflow (pure)
 │   ├── localModule.ts  custom (non-nf-core) tools → standards-compliant modules/local/ (Phase 4)
 │   ├── generator.ts  writes an nf-core-structured project + installs the modules
+│   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs + manifest patch for sharing (Phase 5)
 │   └── validate.ts   `nextflow config` + `-profile test -stub-run` + `nf-core lint` gate
 └── results/
     └── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
