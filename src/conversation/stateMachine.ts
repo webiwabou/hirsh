@@ -61,7 +61,8 @@ import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
-import { collectLocalTool, toNfCoreModule } from "../composition/localModule.js";
+import { collectLocalTool, toNfCoreModule, type LocalToolSpec } from "../composition/localModule.js";
+import { proposeLocalTools } from "../composition/localToolProposal.js";
 import { writeContribution } from "../composition/contribution.js";
 import { buildInclusionGuide, validateNfCoreName } from "../composition/inclusion.js";
 import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
@@ -348,8 +349,9 @@ export class Agent {
     resolved.plan.steps.forEach((s, i) => this.io.say(`  ${i + 1}. ${s.module} — ${s.rationale}`));
     this.io.info(`Modules pinned to nf-core/modules @ ${resolved.sha.slice(0, 10)}`);
 
-    // Phase 4: let the scientist add custom (non-nf-core) tools as local modules,
-    // wired in like any nf-core module.
+    // Phase 4: have the LLM propose custom tools for gaps the modules don't cover,
+    // then let the scientist add their own — both wired in as local modules.
+    await this.proposeLocalToolsStep(resolved, session.query);
     await this.addLocalTools(resolved);
 
     const go = await this.io.confirm("Generate this pipeline project?", true);
@@ -451,22 +453,61 @@ export class Agent {
     );
     while (add) {
       const spec = await collectLocalTool(this.io);
-      if (spec) {
-        if (resolved.modules.some((m) => m.name === spec.name)) {
-          this.io.warn(`A module named "${spec.name}" is already in the plan; skipping.`);
-        } else {
-          resolved.modules.push(toNfCoreModule(spec));
-          resolved.localTools = [...(resolved.localTools ?? []), spec];
-          resolved.plan.steps.push({
-            module: spec.name,
-            rationale: `Custom local tool: ${spec.description}`,
-          });
-          this.io.info(
-            `Added local module "${spec.name}" (${spec.container ?? spec.conda ?? "no environment set"}).`,
-          );
+      if (spec) this.addLocalToolToPlan(resolved, spec);
+      add = await this.io.confirm("Add another custom tool?", false);
+    }
+  }
+
+  /** Appends a local tool spec to the composition as a local module. */
+  private addLocalToolToPlan(resolved: ResolvedComposition, spec: LocalToolSpec): boolean {
+    if (resolved.modules.some((m) => m.name === spec.name)) {
+      this.io.warn(`A module named "${spec.name}" is already in the plan; skipping.`);
+      return false;
+    }
+    resolved.modules.push(toNfCoreModule(spec));
+    resolved.localTools = [...(resolved.localTools ?? []), spec];
+    resolved.plan.steps.push({
+      module: spec.name,
+      rationale: `Custom local tool: ${spec.description}`,
+    });
+    this.io.info(
+      `Added local module "${spec.name}" (${spec.container ?? spec.conda ?? "no environment set"}).`,
+    );
+    return true;
+  }
+
+  /**
+   * Phase 4 — LLM-proposed local tools. Asks the model whether any step the
+   * objective needs is missing from the selected nf-core modules and, for each
+   * proposed gap tool, offers to add it as a local module for the user to review.
+   */
+  private async proposeLocalToolsStep(
+    resolved: ResolvedComposition,
+    query: QueryContext,
+  ): Promise<void> {
+    const moduleNames = resolved.modules.filter((m) => !m.local).map((m) => m.name);
+    const proposals = await this.io.withSpinner("Checking for gaps the modules don't cover", () =>
+      proposeLocalTools(this.provider, query, moduleNames),
+    );
+    if (proposals.length === 0) return;
+
+    this.io.say(
+      `I think ${proposals.length} step(s) may need a custom tool the nf-core modules don't provide:`,
+    );
+    for (const spec of proposals) {
+      this.io.say(`  • ${spec.name} — ${spec.description}`);
+      this.io.info(`      command sketch: ${spec.command}`);
+      this.io.info(
+        `      in: ${spec.inputs[0]?.name} → out: ${spec.outputs[0]?.name} (${spec.outputs[0]?.pattern}); ` +
+          `env: ${spec.container ?? spec.conda ?? "none — set one"}`,
+      );
+      const add = await this.io.confirm(`Add "${spec.name}" as a local module (review the sketch first)?`, false);
+      if (add) {
+        this.addLocalToolToPlan(resolved, spec);
+        if (!spec.container && !spec.conda) {
+          this.io.warn(`  Set a container/conda for "${spec.name}" and refine the command before a real run.`);
         }
       }
-      add = await this.io.confirm("Add another custom tool?", false);
     }
   }
 

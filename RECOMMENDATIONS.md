@@ -235,8 +235,12 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   with `modules/local/`, as real nf-core pipelines do). Verified end-to-end: a
   pipeline with a generated local module executes via `-profile test -stub-run` with
   no edits (`composition/localModule.ts`, unit-tested).
-  - ⬜ Remaining: let the LLM *propose* local tools from intent (today they're
-    gathered interactively), multi-input local modules, and per-tool test data.
+  - ✅ The LLM now also *proposes* local tools: during composition it flags steps the
+    objective needs that the selected nf-core modules don't cover and proposes a
+    minimal custom tool (command sketch, I/O kinds, conda/container if a real tool
+    fits) for each gap, which the scientist reviews before it's added
+    (`composition/localToolProposal.ts`, schema-validated, unit-tested).
+  - ⬜ Remaining: multi-input local modules, and per-tool test data.
 
 ## Phase 5 — Contributing back to the community 🔵 (largely shipped)
 

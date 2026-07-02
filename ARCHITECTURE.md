@@ -58,6 +58,7 @@ src/
 │   ├── planner.ts    LLM: suggest tools → search registry → order into a plan
 │   ├── wiring.ts     channel-type matcher → runnable DSL2 workflow (pure)
 │   ├── localModule.ts  custom (non-nf-core) tools → standards-compliant modules/local/ (Phase 4)
+│   ├── localToolProposal.ts  LLM proposes local tools for gaps the modules don't cover (Phase 4)
 │   ├── generator.ts  writes an nf-core-structured project + installs the modules
 │   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs + manifest patch for sharing (Phase 5)
 │   ├── contribution.ts  writes a local tool in nf-core/modules layout + nf-test for a PR (Phase 5)
