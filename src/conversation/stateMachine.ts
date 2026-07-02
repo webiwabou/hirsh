@@ -209,6 +209,7 @@ export class Agent {
       return true;
     }
 
+    session.designReview = review; // carried into results interpretation (Phase E)
     this.io.heading("Experimental design review");
     if (review.summary) this.io.say(review.summary);
     for (const o of sortedObservations(review)) {
@@ -1208,9 +1209,20 @@ export class Agent {
       return;
     }
 
+    // Carry the pre-run design caveats (caution/risk) into the interpretation so
+    // Hirsh revisits their impact on the actual results.
+    const designNotes = (session.designReview?.observations ?? [])
+      .filter((o) => o.severity !== "info")
+      .map((o) => `[${o.topic}] ${o.message}`);
+
     this.io.say("Results summary:\n");
-    await summarizeResults(this.provider, pipeline, session.query, report, (chunk) =>
-      this.io.raw(chunk),
+    await summarizeResults(
+      this.provider,
+      pipeline,
+      session.query,
+      report,
+      (chunk) => this.io.raw(chunk),
+      designNotes,
     );
     this.io.endStream();
 

@@ -2,6 +2,7 @@
 import type { PipelineDefinition } from "../pipelines/types.js";
 import type { ContainerEngine } from "../config/types.js";
 import type { ExecutorSettings } from "../execution/executor.js";
+import type { DesignReview } from "./designReview.js";
 
 export type Phase =
   | "intent" // Phase A — understand the intent
@@ -60,6 +61,8 @@ export interface Session {
   executorConfigPath?: string;
   /** Extra environment for the Nextflow process (e.g. image cache dirs). */
   runEnv?: Record<string, string>;
+  /** Experimental-design review from Phase 6, carried into results interpretation. */
+  designReview?: DesignReview;
 }
 
 export function createSession(): Session {

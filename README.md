@@ -229,8 +229,10 @@ HTML reports (open them in your browser):
   changing one parameter — without redoing the whole setup.
 - **E · Interpretation** — locates the outputs, extracts concrete numbers
   (per-sample library sizes from count matrices, MultiQC per-sample metrics,
-  variant counts from VCFs) and summarizes the findings in plain language. It can
-  also write a paste-ready **methods paragraph** (`METHODS.md`) with the exact
+  variant counts from VCFs) and explains the findings **biologically** in the
+  context of your objective — revisiting any design caveats flagged before the run
+  (e.g. a batch effect) and ending with a concrete next step. It can also write a
+  paste-ready **methods paragraph** (`METHODS.md`) with the exact
   pipeline/Nextflow/tool versions and citations (DOIs).
 
 Every run also writes a **reproducibility bundle** into its run directory —

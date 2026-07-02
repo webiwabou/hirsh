@@ -299,9 +299,12 @@ The full realization: a scientific collaborator, not a command builder.
   never blocks). Schema-validated LLM output; verified live (it caught n=2
   under-replication and a treatment/processing-date batch confound)
   (`conversation/designReview.ts`, unit-tested).
+  - ✅ Extended to results: the pre-run caveats (batch effects, low replication) are
+    carried into Phase E, where the interpretation revisits their impact and
+    explains findings biologically in the context of the objective, ending with a
+    concrete next step (`results/interpreter.ts`, prompt wiring unit-tested).
   - ⬜ Remaining: fold the built samplesheet into the review (per-group replicate
-    counts), suggest specific analyses/controls, and reason about the *results'*
-    biological meaning too.
+    counts) and suggest specific analyses/controls.
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool
@@ -337,7 +340,7 @@ The full realization: a scientific collaborator, not a command builder.
 - 🔵 Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba and installs Nextflow today; installing the backend itself is next)
 - 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
 - ✅ Composes pipelines that mix nf-core modules with the scientist's own tools (generated modules/local/ + nf-core, runs via stub)
-- ✅ Interprets results as science, quantitatively (numbers today; deeper per-tool detail next)
+- ✅ Interprets results as science, quantitatively and biologically — concrete numbers, meaning in context of the objective, and revisiting pre-run design caveats
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
 - 🔵 Contributes novel, standards-compliant modules and pipelines back to nf-core (packages + publishes to GitHub today; nf-core/modules PRs and inclusion next)
 - ⬜ Requires zero Nextflow/infra knowledge from the scientist

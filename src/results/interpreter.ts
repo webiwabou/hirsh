@@ -213,16 +213,22 @@ export async function summarizeResults(
   query: QueryContext,
   report: ResultsReport,
   onToken: (chunk: string) => void,
+  designNotes: string[] = [],
 ): Promise<string> {
   const facts = report.outputs
     .map((o) => `• ${o.output.path} (${o.output.description})\n  → ${o.found ? o.detail : "NOT GENERATED"}`)
     .join("\n");
 
   const system = [
-    "You are Hirsh, a bioinformatics assistant, in the INTERPRET-RESULTS phase.",
-    "Summarize the findings for someone who understands biology but not the pipeline's technical detail.",
+    "You are Hirsh, a bioinformatics co-scientist, in the INTERPRET-RESULTS phase.",
+    "Explain the findings for someone who understands biology but not the pipeline's technical detail.",
     "Use the concrete numbers provided (library sizes, QC metrics, variant counts); do not invent any.",
+    "Go beyond restating numbers: say what they mean BIOLOGICALLY in the context of the user's",
+    "objective, and whether the run looks trustworthy (e.g. flag samples with outlier QC).",
+    "If experimental-design caveats were flagged before the run (e.g. low replication, batch",
+    "effects), revisit them here and state honestly how they could affect these results.",
     "If an expected output was not generated, say so. Do not render HTML; only mention its location.",
+    "End with one concrete, appropriate next step. Be honest about limitations; do not overstate.",
     "Respond in English, in brief prose (not long lists).",
   ].join("\n");
 
@@ -230,9 +236,16 @@ export async function summarizeResults(
     `Pipeline run: ${pipeline.name} — ${pipeline.title}.`,
     `User objective: ${query.objective ?? "(not specified)"}.`,
     `Organism: ${query.organism ?? "(not specified)"}.`,
+    `Experimental design: ${query.experimentalDesign ?? "(not specified)"}.`,
     "",
     "Outputs found and their data:",
     facts,
+    "",
+    designNotes.length
+      ? `Design caveats flagged before the run (revisit their impact on these results):\n${designNotes
+          .map((n) => `- ${n}`)
+          .join("\n")}`
+      : "No design caveats were flagged before the run.",
     "",
     report.htmlReports.length
       ? `HTML reports (mention their path so they can be opened): ${report.htmlReports.join(", ")}`
