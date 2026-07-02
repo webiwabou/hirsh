@@ -112,10 +112,13 @@ Make every supported pipeline safe to run for real and make its output land as
   suggest, we do not auto-chain.
   - ⬜ Remaining: offer to run the follow-up directly (still with confirmation).
 
-## Phase 3 — Environment & infrastructure autonomy
+## Phase 3 — Environment & infrastructure autonomy 🔵 (mostly shipped)
 
 Hirsh should manage *where and how* things run, not just *what* runs — this is
-the heart of the "no technical knowledge required" promise.
+the heart of the "no technical knowledge required" promise. Backend selection,
+per-process resource modeling, the executor abstraction, infrastructure
+negotiation and container/data staging are in; full toolchain bootstrapping
+(installing the backend itself) is the main gap.
 
 - ✅ **Per-process resource modeling.** Pipelines can declare their heavy steps
   (`resources.processes`); the pre-flight then compares each step against the
@@ -151,8 +154,16 @@ the heart of the "no technical knowledge required" promise.
   (`execution/negotiation.ts`, unit-tested).
   - ⬜ Remaining: detect actual cluster availability/queues, real runtime estimates
     from prior runs, and live cloud pricing instead of a nominal rate.
-- ⬜ **Container & data staging.** Manage image pulls (Docker/Singularity/Apptainer),
-  cache locations, and staging of large inputs; detect and explain disk pressure.
+- ✅ **Container & data staging.** Before a run Hirsh points image/env downloads at
+  a stable cache so they're reused across runs (`NXF_SINGULARITY_CACHEDIR` /
+  `NXF_CONDA_CACHEDIR`; Docker manages its own store), estimates the run's disk
+  footprint (image footprint + input size read from the samplesheet + intermediate
+  work ≈ 3× inputs), compares it to the free space on the run filesystem, and warns
+  on disk pressure (ok / tight / insufficient) — refusing to silently start a run
+  that would hit "no space left" (`execution/staging.ts`, unit-tested). Skipped on a
+  non-local executor (data stages on the target).
+  - ⬜ Remaining: real image sizes from the pipeline's container manifest, work-dir
+    relocation to a bigger disk, and pruning the cache when it grows.
 - 🔵 **Toolchain bootstrapping.** On a fresh machine with nothing installed, detect
   what's missing and — with explicit confirmation — install it. Nextflow is now
   self-installable: when it's absent, Hirsh offers to run the official installer

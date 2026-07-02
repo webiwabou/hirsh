@@ -72,6 +72,8 @@ export interface PipelineDefinition {
     recommendedMemoryGB?: number;
     minMemoryGB?: number;
     recommendedCpus?: number;
+    /** Rough container/conda image footprint (GB), for disk-pressure checks. */
+    imageFootprintGB?: number;
     /**
      * Heavy steps for the per-process pre-flight model. When present, Hirsh can
      * name which step won't fit and whether it can be capped or has a hard floor.

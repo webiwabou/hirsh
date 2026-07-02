@@ -86,6 +86,7 @@ resources:
   recommendedMemoryGB: 32
   minMemoryGB: 16
   recommendedCpus: 8
+  imageFootprintGB: 18
   # Heavy steps at human WGS scale (BWA-MEM2 + GATK path). Reference indexing and
   # alignment have a hard memory floor (the index must fit in RAM); duplicate
   # marking and variant calling can be capped lower at the cost of speed.

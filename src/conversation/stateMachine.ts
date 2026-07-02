@@ -5,7 +5,7 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
@@ -23,6 +23,16 @@ import {
   describeExecutor,
 } from "../execution/executor.js";
 import { negotiateInfrastructure } from "../execution/negotiation.js";
+import {
+  assessDiskPressure,
+  cacheEnvFor,
+  defaultCacheDir,
+  defaultImageFootprintGB,
+  estimateStagingNeeds,
+  extractPathCells,
+  getFreeDiskGB,
+  sumFileSizes,
+} from "../execution/staging.js";
 import { runNextflow } from "../execution/runner.js";
 import {
   assessResources,
@@ -510,6 +520,74 @@ export class Agent {
     this.io.info(`Execution target: ${describeExecutor(session.executor)}.`);
   }
 
+  /**
+   * Phase 3 — container & data staging. Points image/env downloads at a stable
+   * cache (so they're reused), estimates the run's disk footprint (images +
+   * inputs + intermediate work) and warns about disk pressure before running.
+   * Returns false only if disk is insufficient and the user declines to proceed.
+   */
+  private async phaseStaging(session: Session, pipeline: PipelineDefinition, runDir: string): Promise<boolean> {
+    const engine = session.engine ?? this.config.execution.containerEngine;
+
+    // A stable cache means images/conda envs are downloaded once and reused.
+    const cacheDir = defaultCacheDir();
+    const cacheEnv = cacheEnvFor(engine, cacheDir);
+    if (Object.keys(cacheEnv).length > 0) {
+      try {
+        for (const dir of Object.values(cacheEnv)) mkdirSync(dir, { recursive: true });
+        session.runEnv = { ...(session.runEnv ?? {}), ...cacheEnv };
+        this.io.info(`Image cache: ${Object.values(cacheEnv).join(", ")} (reused across runs).`);
+      } catch {
+        /* cache is an optimization; never block on it */
+      }
+    }
+
+    // On a non-local executor the work directory and images live on the cluster
+    // or in the cloud, so the local disk check doesn't apply.
+    if (session.executor && session.executor.executor !== "local") {
+      this.io.info(
+        "Data and images stage on the execution target, so I'm not checking this machine's disk.",
+      );
+      return true;
+    }
+
+    // Estimate inputs from the samplesheet (skipped for the test profile).
+    let inputBytes = 0;
+    if (!session.useTestProfile && session.samplesheetPath) {
+      try {
+        const cells = extractPathCells(readFileSync(session.samplesheetPath, "utf8"));
+        inputBytes = await sumFileSizes(cells);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    const estimate = estimateStagingNeeds({
+      imagesGB: pipeline.resources?.imageFootprintGB ?? defaultImageFootprintGB(engine),
+      inputBytes,
+    });
+    const freeGB = await getFreeDiskGB(runDir);
+    if (freeGB == null) return true; // can't read disk; don't block
+
+    const disk = assessDiskPressure(freeGB, estimate);
+    if (disk.level === "ok") {
+      this.io.info(disk.message);
+      return true;
+    }
+    if (disk.level === "tight") {
+      this.io.warn(disk.message);
+      return true;
+    }
+    // insufficient
+    this.io.warn(disk.message);
+    const go = await this.io.confirm("Try to run anyway despite low disk?", false);
+    if (!go) {
+      this.io.info("Okay — not running. Free some space or use a larger work directory, then retry.");
+      return false;
+    }
+    return true;
+  }
+
   /** Phase D — show the command, check the environment and run after confirmation. */
   private async phaseConfirmAndRun(session: Session, runDir: string): Promise<boolean> {
     session.phase = "confirm";
@@ -526,6 +604,9 @@ export class Agent {
 
     const proceed = await this.phaseResourceCheck(session, pipeline);
     if (!proceed) return false;
+
+    const staged = await this.phaseStaging(session, pipeline, runDir);
+    if (!staged) return false;
 
     const cmd = `nextflow ${(session.command ?? []).join(" ")}`;
     this.io.say("Command to run:");
@@ -574,7 +655,7 @@ export class Agent {
 
     session.phase = "execute";
     this.io.heading("Running Nextflow (live log)");
-    const result = await runNextflow(session.command ?? [], runDir, this.io);
+    const result = await runNextflow(session.command ?? [], runDir, this.io, session.runEnv);
     this.writeRunProvenance(session, runDir, env, true, result.exitCode);
     if (result.exitCode !== 0) {
       this.io.warn(`Nextflow exited with an error (code ${result.exitCode}).`);

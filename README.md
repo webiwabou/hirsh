@@ -267,6 +267,15 @@ is skipped — the scheduler sizes each job — and the chosen target is recorde
 the run's provenance. Set a default with `execution.executor` (and
 `execution.queue`) in the config.
 
+## Container & data staging
+
+Before a local run Hirsh also checks disk: it points image/env downloads at a
+stable cache (`NXF_SINGULARITY_CACHEDIR` / `NXF_CONDA_CACHEDIR`) so they're reused,
+estimates the run's footprint (images + input size read from the samplesheet +
+intermediate work) and compares it to the free space — warning you if disk is
+tight and refusing to silently start a run that would run out of space. (Docker
+manages its own image store; on a cluster/cloud executor this check is skipped.)
+
 ## Composing a pipeline from nf-core modules
 
 If no curated pipeline fits your request (or you type `compose` at the selection

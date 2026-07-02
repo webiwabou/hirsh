@@ -80,6 +80,7 @@ resources:
   recommendedMemoryGB: 38
   minMemoryGB: 24
   recommendedCpus: 8
+  imageFootprintGB: 12
   # Heavy steps at human-genome scale (STAR aligner path). Genome indexing and
   # alignment hold the index in memory, so their memory can't be capped down;
   # quantification and QC scale more gracefully.

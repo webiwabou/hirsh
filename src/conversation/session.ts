@@ -58,6 +58,8 @@ export interface Session {
   executor?: ExecutorSettings;
   /** Path to the generated executor `-c` config, when not local. */
   executorConfigPath?: string;
+  /** Extra environment for the Nextflow process (e.g. image cache dirs). */
+  runEnv?: Record<string, string>;
 }
 
 export function createSession(): Session {

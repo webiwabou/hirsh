@@ -18,11 +18,16 @@ export interface RunResult {
  * Launches `nextflow <args>` in `cwd`. Streams output in real time via io.raw.
  * Returns the exit code and, on failure, an error summary.
  */
-export function runNextflow(args: string[], cwd: string, io: AgentIO): Promise<RunResult> {
+export function runNextflow(
+  args: string[],
+  cwd: string,
+  io: AgentIO,
+  extraEnv?: Record<string, string>,
+): Promise<RunResult> {
   return new Promise((resolvePromise) => {
     const child = spawn("nextflow", args, {
       cwd,
-      env: process.env,
+      env: { ...process.env, ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
