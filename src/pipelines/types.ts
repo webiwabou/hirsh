@@ -72,6 +72,17 @@ export interface PipelineDefinition {
     recommendedMemoryGB?: number;
     minMemoryGB?: number;
     recommendedCpus?: number;
+    /**
+     * Heavy steps for the per-process pre-flight model. When present, Hirsh can
+     * name which step won't fit and whether it can be capped or has a hard floor.
+     */
+    processes?: Array<{
+      name: string;
+      memoryGB: number;
+      cpus?: number;
+      note?: string;
+      cappable?: boolean;
+    }>;
   };
   results: {
     /** Name of the param that defines the output directory (usually "outdir"). */

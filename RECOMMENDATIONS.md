@@ -112,9 +112,17 @@ Make every supported pipeline safe to run for real and make its output land as
 Hirsh should manage *where and how* things run, not just *what* runs — this is
 the heart of the "no technical knowledge required" promise.
 
-- ⬜ **Per-process resource modeling.** Move beyond whole-pipeline memory to the
-  real bottleneck steps (e.g. STAR indexing), so adapt/refuse verdicts are precise
-  and Hirsh can say *which* step won't fit and why.
+- ✅ **Per-process resource modeling.** Pipelines can declare their heavy steps
+  (`resources.processes`); the pre-flight then compares each step against the
+  memory budget, shows a per-step fit breakdown, and names the specific
+  bottleneck. It distinguishes a step whose memory can be capped (slower) from one
+  with a hard floor (e.g. STAR/BWA-MEM2 genome indexing) that would simply run out
+  of memory — so e.g. rnaseq on a 30 GB machine now *honestly refuses* (indexing
+  needs ~38 GB and can't be reduced) instead of vaguely "adapting"
+  (`assessProcesses` in `execution/resources.ts`, unit-tested; declared for rnaseq
+  and sarek). Falls back to the whole-pipeline model when no steps are declared.
+  - ⬜ Remaining: skip the indexing floor when a prebuilt index/genome is provided,
+    and read real per-process peaks from Nextflow trace/execution reports.
 - ⬜ **Executor abstraction.** Run locally, on HPC schedulers (Slurm/SGE) or in the
   cloud (AWS Batch, Azure, GCP) by choosing profiles and executors — the scientist
   just says "run it on the cluster".

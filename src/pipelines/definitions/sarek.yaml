@@ -86,6 +86,28 @@ resources:
   recommendedMemoryGB: 32
   minMemoryGB: 16
   recommendedCpus: 8
+  # Heavy steps at human WGS scale (BWA-MEM2 + GATK path). Reference indexing and
+  # alignment have a hard memory floor (the index must fit in RAM); duplicate
+  # marking and variant calling can be capped lower at the cost of speed.
+  processes:
+    - name: genome indexing (BWA-MEM2)
+      memoryGB: 32
+      cpus: 8
+      note: builds the BWA-MEM2 index, which must be held in memory
+      cappable: false
+    - name: read alignment (BWA-MEM2)
+      memoryGB: 16
+      cpus: 12
+      note: keeps the reference index resident while mapping reads
+      cappable: false
+    - name: duplicate marking (GATK MarkDuplicates)
+      memoryGB: 16
+      cpus: 4
+      cappable: true
+    - name: variant calling (GATK HaplotypeCaller)
+      memoryGB: 14
+      cpus: 8
+      cappable: true
 
 results:
   outdirParam: outdir

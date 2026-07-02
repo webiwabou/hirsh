@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessProcesses,
   assessResources,
   formatMemoryGB,
   parseMemoryToGB,
+  type ProcessResourceHint,
 } from "../src/execution/resources.js";
 
 describe("parseMemoryToGB", () => {
@@ -53,5 +55,58 @@ describe("assessResources (the 40 / 30 / 2 GB story)", () => {
   it("cannot judge without hints", () => {
     const a = assessResources({}, { cpus: 4, memoryGB: 8 });
     expect(a.verdict).toBe("ok");
+  });
+});
+
+describe("assessProcesses (per-process model)", () => {
+  const processes: ProcessResourceHint[] = [
+    { name: "genome indexing (STAR)", memoryGB: 38, note: "holds the index", cappable: false },
+    { name: "read alignment (STAR)", memoryGB: 12, cappable: false },
+    { name: "quantification (Salmon)", memoryGB: 8, cappable: true },
+    { name: "QC and reporting", memoryGB: 4, cappable: true },
+  ];
+
+  it("is OK when every step fits, naming the peak step", () => {
+    const a = assessProcesses(processes, { cpus: 16, memoryGB: 64 });
+    expect(a.verdict).toBe("ok");
+    expect(a.limitingStep).toBe("genome indexing (STAR)");
+    expect(a.caps).toBeUndefined();
+  });
+
+  it("refuses and names the non-cappable step that won't fit", () => {
+    // 20 GB budget: indexing (38, hard floor) can't fit and can't be capped.
+    const a = assessProcesses(processes, { cpus: 8, memoryGB: 20 });
+    expect(a.verdict).toBe("refuse");
+    expect(a.limitingStep).toBe("genome indexing (STAR)");
+    expect(a.message).toContain("genome indexing (STAR)");
+    expect(a.caps).toBeUndefined();
+  });
+
+  it("adapts when only cappable steps exceed the budget", () => {
+    // 10 GB budget: only Salmon (8, cappable) — wait, 8 <= 10. Use 6 GB budget so
+    // Salmon(8) overflows but is cappable; all non-cappable steps must fit.
+    const light: ProcessResourceHint[] = [
+      { name: "alignment", memoryGB: 5, cappable: false },
+      { name: "quantification", memoryGB: 8, cappable: true },
+    ];
+    const a = assessProcesses(light, { cpus: 4, memoryGB: 6 });
+    expect(a.verdict).toBe("adapt");
+    expect(a.limitingStep).toBe("quantification");
+    expect(a.caps?.maxMemory).toBe("6.GB");
+  });
+
+  it("refuses if a non-cappable step overflows even when a cappable one does too", () => {
+    const a = assessProcesses(processes, { cpus: 8, memoryGB: 10 });
+    // alignment (12, non-cappable) overflows → refuse, not adapt.
+    expect(a.verdict).toBe("refuse");
+  });
+
+  it("assessResources dispatches to the per-process model when processes exist", () => {
+    const a = assessResources(
+      { recommendedMemoryGB: 38, minMemoryGB: 24, processes },
+      { cpus: 8, memoryGB: 20 },
+    );
+    expect(a.verdict).toBe("refuse");
+    expect(a.limitingStep).toBe("genome indexing (STAR)");
   });
 });

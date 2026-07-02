@@ -232,6 +232,13 @@ machine (or the caps in `execution.maxMemory` / `execution.maxCpus`) and:
 - **recommends against running** when the machine is far too small — e.g. a
   ~40 GB pipeline on a 2 GB laptop.
 
+When a pipeline declares its **heavy steps**, Hirsh models them individually: it
+shows which steps fit your budget and names the specific bottleneck, telling apart
+a step whose memory it can cap (slower) from one with a hard floor — e.g. STAR/
+BWA-MEM2 genome indexing, which can't be reduced. So instead of a vague "maybe",
+you get "the genome-indexing step needs ~38 GB and can't be capped; this machine
+has 30 GB".
+
 The test profile skips this check (it uses tiny bundled data).
 
 ## Composing a pipeline from nf-core modules

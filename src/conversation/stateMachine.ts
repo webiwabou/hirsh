@@ -285,6 +285,20 @@ export class Agent {
     const available = this.availableBudget();
     const assessment = assessResources(pipeline.resources, available);
 
+    // When per-process guidance exists, show which steps fit under the budget so
+    // the verdict is transparent, not a single opaque number.
+    const processes = pipeline.resources.processes;
+    if (processes && processes.length > 0) {
+      this.io.info(
+        `Heavy steps vs. your ${Math.floor(available.memoryGB)} GB budget:`,
+      );
+      for (const p of [...processes].sort((a, b) => b.memoryGB - a.memoryGB)) {
+        const fits = p.memoryGB <= available.memoryGB;
+        const mark = fits ? "fits" : p.cappable === false ? "WON'T FIT (hard floor)" : "over budget (cappable)";
+        this.io.info(`  • ${p.name}: ~${p.memoryGB} GB — ${mark}`);
+      }
+    }
+
     if (assessment.verdict === "ok") {
       this.io.info(assessment.message);
       return true;

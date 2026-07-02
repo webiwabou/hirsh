@@ -80,6 +80,28 @@ resources:
   recommendedMemoryGB: 38
   minMemoryGB: 24
   recommendedCpus: 8
+  # Heavy steps at human-genome scale (STAR aligner path). Genome indexing and
+  # alignment hold the index in memory, so their memory can't be capped down;
+  # quantification and QC scale more gracefully.
+  processes:
+    - name: genome indexing (STAR)
+      memoryGB: 38
+      cpus: 12
+      note: builds the STAR index and holds the suffix array in memory
+      cappable: false
+    - name: read alignment (STAR)
+      memoryGB: 12
+      cpus: 12
+      note: keeps the loaded genome index in memory while aligning
+      cappable: false
+    - name: quantification (Salmon)
+      memoryGB: 8
+      cpus: 8
+      cappable: true
+    - name: QC and reporting (FastQC/trimming/MultiQC)
+      memoryGB: 4
+      cpus: 4
+      cappable: true
 
 # rnaseq produces count matrices, not differential expression. Point users at the
 # natural next step so "differentially expressed genes" actually gets answered.
