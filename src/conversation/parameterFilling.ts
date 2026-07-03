@@ -204,10 +204,12 @@ async function buildSamplesheet(
   const rows: Array<Record<string, string>> = [];
 
   if (isProtein) {
-    const dir = await io.ask("Directory with the protein FASTA files (.fasta/.fa):");
-    const entries = listByExt(dir, [".fasta", ".fa", ".faa"]);
+    const dir = await io.ask(
+      "Directory with the protein FASTA files (.fasta/.fa, or any folder of sequence files):",
+    );
+    const entries = await resolveFastaFiles(io, dir, runDir);
     if (entries.length === 0) {
-      io.warn("I found no FASTA files in that directory; the samplesheet will be empty.");
+      io.warn("No FASTA files to use; the samplesheet will be empty.");
     }
     for (const f of entries) rows.push({ sample: baseName(f), fasta: f });
   } else {
@@ -281,6 +283,47 @@ async function resolveFastqScan(io: AgentIO, dir: string, runDir: string): Promi
   for (const f of res.failed) io.warn(`  couldn't link ${basename(f)} (symlink failed).`);
   io.info(`Linked ${res.linked.length} file(s) into ${linkDir} with canonical names.`);
   return scanFastqs(linkDir);
+}
+
+/**
+ * Resolves a directory to protein FASTA files. Prefers the extension-based list;
+ * when it finds nothing, falls back to content-based recognition (sniffing FASTA
+ * by its bytes) and offers to symlink to canonical `.fasta` names. Unsupported
+ * formats are reported, not silently ignored.
+ */
+async function resolveFastaFiles(io: AgentIO, dir: string, runDir: string): Promise<string[]> {
+  const entries = listByExt(dir, [".fasta", ".fa", ".faa"]);
+  if (entries.length > 0) return entries;
+
+  const sniffed = await scanSequenceDir(dir);
+  const fastas = sniffed.sequences.filter((s) => s.format === "fasta");
+  if (fastas.length === 0) {
+    io.warn("I found no FASTA files in that directory (by extension or by content).");
+    for (const u of sniffed.unsupported) io.warn(`  • ${basename(u.file)}: looks like ${u.reason}.`);
+    if (sniffed.unsupported.length > 0) {
+      io.info("I can read plain or gzipped FASTA. Convert other formats to FASTA first.");
+    }
+    return [];
+  }
+
+  io.info(
+    `No .fasta/.fa extension there, but I recognized ${fastas.length} FASTA file(s) by their content.`,
+  );
+  for (const u of sniffed.unsupported) io.warn(`  • skipping ${basename(u.file)} (looks like ${u.reason}).`);
+  const link = await io.confirm(
+    "Create canonical .fasta names (symlinks) so the pipeline reads them?",
+    true,
+  );
+  if (!link) {
+    io.info("Okay — leaving them as-is; point me at a folder of properly named FASTA files to continue.");
+    return [];
+  }
+
+  const linkDir = join(runDir, "inputs");
+  const res = linkCanonicalSequences(fastas, linkDir);
+  for (const f of res.failed) io.warn(`  couldn't link ${basename(f)} (symlink failed).`);
+  io.info(`Linked ${res.linked.length} file(s) into ${linkDir} with canonical names.`);
+  return res.linked.map((l) => l.to);
 }
 
 /** Lets the user point at an existing CSV; validates it against the column spec. */

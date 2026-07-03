@@ -86,3 +86,19 @@ describe("scanSequenceDir + linkCanonicalSequences (content-based ingestion)", (
     expect(basename(pairs[0].fastq_2 ?? "")).toBe("s1_R2.fastq.gz");
   });
 });
+
+describe("content-based ingestion — protein FASTA", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "hirsh-fasta-"));
+    writeFileSync(join(dir, "prot.seq"), FASTA); // FASTA content, non-standard extension
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("recognizes FASTA by content and links it to a canonical .fasta name", async () => {
+    const scan = await scanSequenceDir(dir);
+    expect(scan.sequences.map((s) => s.format)).toEqual(["fasta"]);
+    const res = linkCanonicalSequences(scan.sequences, join(dir, "inputs"));
+    expect(res.linked.map((l) => basename(l.to))).toEqual(["prot.fasta"]);
+  });
+});
