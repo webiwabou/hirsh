@@ -32,6 +32,33 @@ export interface SamplesheetSpec {
   columns: SamplesheetColumn[];
 }
 
+/** Rough resource guidance for REAL runs (used by the resource pre-flight). */
+export interface PipelineResources {
+  recommendedMemoryGB?: number;
+  minMemoryGB?: number;
+  recommendedCpus?: number;
+  /** Rough container/conda image footprint (GB), for disk-pressure checks. */
+  imageFootprintGB?: number;
+  /**
+   * Heavy steps for the per-process pre-flight model. When present, Hirsh can
+   * name which step won't fit and whether it can be capped or has a hard floor.
+   */
+  processes?: Array<{
+    name: string;
+    memoryGB: number;
+    cpus?: number;
+    note?: string;
+    cappable?: boolean;
+    /** Params whose presence skips this step (e.g. a prebuilt index). */
+    skipIfParams?: string[];
+  }>;
+}
+
+export interface PipelineCitation {
+  text: string;
+  doi?: string;
+}
+
 export interface ResultOutput {
   /** Path relative to outdir. */
   path: string;
@@ -46,7 +73,7 @@ export interface PipelineDefinition {
   /** Pinned revision passed to `-r`, e.g. "3.14.0". */
   version: string;
   /** Primary citation for the pipeline, for publication-ready methods. */
-  citation?: { text: string; doi?: string };
+  citation?: PipelineCitation;
   /** Short human-readable title. */
   title: string;
   /** Which biological question it answers (key for the LLM's semantic matching). */
@@ -70,26 +97,7 @@ export interface PipelineDefinition {
    * Rough resource guidance for REAL runs (ignored for the test profile).
    * Used by the resource-awareness pre-flight in Phase D.
    */
-  resources?: {
-    recommendedMemoryGB?: number;
-    minMemoryGB?: number;
-    recommendedCpus?: number;
-    /** Rough container/conda image footprint (GB), for disk-pressure checks. */
-    imageFootprintGB?: number;
-    /**
-     * Heavy steps for the per-process pre-flight model. When present, Hirsh can
-     * name which step won't fit and whether it can be capped or has a hard floor.
-     */
-    processes?: Array<{
-      name: string;
-      memoryGB: number;
-      cpus?: number;
-      note?: string;
-      cappable?: boolean;
-      /** Params whose presence skips this step (e.g. a prebuilt index). */
-      skipIfParams?: string[];
-    }>;
-  };
+  resources?: PipelineResources;
   results: {
     /** Name of the param that defines the output directory (usually "outdir"). */
     outdirParam: string;
@@ -137,4 +145,8 @@ export interface FollowUpSpec {
   title?: string;
   /** Key outputs of the follow-up, so its results are interpreted like a primary run. */
   outputs?: ResultOutput[];
+  /** Resource guidance for a light pre-flight before running the follow-up. */
+  resources?: PipelineResources;
+  /** Primary citation for the follow-up, for its publication-ready methods. */
+  citation?: PipelineCitation;
 }

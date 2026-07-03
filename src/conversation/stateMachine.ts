@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
-import type { PipelineDefinition } from "../pipelines/types.js";
+import type { PipelineCitation, PipelineDefinition } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
 import {
   BACKENDS,
@@ -1608,6 +1608,14 @@ export class Agent {
       }
     }
 
+    // Light resource pre-flight (differentialabundance is modest — a whole-run
+    // memory check, not the heavy per-process model). Skipped on a cluster/cloud
+    // executor, where the scheduler sizes each job.
+    if (!(await this.followUpResourceCheck(session, fu))) {
+      this.io.info(`Not running. The inputs are prepared in ${runDir}.`);
+      return;
+    }
+
     const engine = session.engine ?? this.config.execution.containerEngine;
     let env = await checkEnvironment(engine);
     if (!env.nextflow.available) {
@@ -1650,11 +1658,84 @@ export class Agent {
     if (result.exitCode !== 0) {
       this.io.warn(`${fu.pipeline} exited with an error (code ${result.exitCode}).`);
       if (result.errorSummary) this.io.say(result.errorSummary);
+      this.recordFollowUpRun(session, fu, outdir, true, result.exitCode);
       return;
     }
     this.io.say(`${fu.pipeline} completed successfully.`);
     await this.interpretFollowUp(session, fu, outdir);
+    this.recordFollowUpRun(session, fu, outdir, true, result.exitCode);
+
+    // Publication-ready methods for the follow-up too (its own versions/citation).
+    await this.generateMethods({
+      label: fu.pipeline,
+      outdir,
+      runDir,
+      pipelineName: fu.pipeline,
+      revision: fu.revision!,
+      citation: fu.citation,
+      nextflowVersion: env.nextflow.version,
+      engine,
+      query: session.query,
+    });
+
     this.io.info(`Results: ${outdir}`);
+  }
+
+  /**
+   * Light resource pre-flight for a follow-up run: on a local executor, checks the
+   * follow-up's declared memory guidance against the budget and, if it doesn't
+   * fit, warns honestly and asks whether to proceed. Not the full per-process
+   * negotiation of the primary run — differentialabundance is modest. Returns true
+   * to proceed.
+   */
+  private async followUpResourceCheck(
+    session: Session,
+    fu: NonNullable<PipelineDefinition["followUp"]>,
+  ): Promise<boolean> {
+    if (session.executor && session.executor.executor !== "local") return true;
+    if (!fu.resources) return true;
+    const assessment = assessResources(fu.resources, this.availableBudget());
+    if (assessment.verdict === "ok") {
+      this.io.info(assessment.message);
+      return true;
+    }
+    this.io.warn(assessment.message);
+    return this.io.confirm(`Run ${fu.pipeline} anyway?`, assessment.verdict === "adapt", {
+      consequential: true,
+    });
+  }
+
+  /** Records a follow-up run into project memory (best-effort; never blocks). */
+  private recordFollowUpRun(
+    session: Session,
+    fu: NonNullable<PipelineDefinition["followUp"]>,
+    outdir: string,
+    executed: boolean,
+    exitCode?: number,
+  ): void {
+    if (!this.config.memory.enabled) return;
+    try {
+      const record: RunRecord = {
+        date: new Date().toISOString(),
+        pipeline: fu.pipeline,
+        revision: fu.revision,
+        organism: session.query.organism,
+        dataType: session.query.dataType,
+        objective: session.query.objective,
+        experimentalDesign: session.query.experimentalDesign,
+        outdir,
+        engine: session.engine ?? this.config.execution.containerEngine,
+        executor: session.executor ? describeExecutor(session.executor) : "local machine",
+        executorName: session.executor?.executor ?? "local",
+        queue: session.executor?.queue,
+        executed,
+        exitCode,
+      };
+      this.memory = addRun(this.mem(), record);
+      saveMemory(this.memoryPath(), this.memory);
+    } catch {
+      /* never block on memory */
+    }
   }
 
   /**
@@ -1708,41 +1789,70 @@ export class Agent {
   }
 
   /**
-   * Phase 6 — publication-ready methods. Builds a paste-ready methods paragraph
-   * and references from the run's pinned versions, container engine and the real
-   * tool versions nf-core recorded, and writes METHODS.md into the run directory.
+   * Phase 6 — publication-ready methods for the primary run. Reads the real tool
+   * versions and the Nextflow/engine recorded in the manifest, then delegates to
+   * the shared generator.
    */
   private async offerMethods(session: Session, pipeline: PipelineDefinition): Promise<void> {
     if (!session.outdir) return;
+    let nextflowVersion: string | undefined;
+    let engine: string = session.engine ?? this.config.execution.containerEngine;
+    try {
+      const manifest = JSON.parse(readFileSync(join(session.runDir ?? "", "run_manifest.json"), "utf8"));
+      nextflowVersion = manifest?.environment?.nextflow;
+      if (manifest?.environment?.containerEngine) engine = manifest.environment.containerEngine;
+    } catch {
+      /* manifest optional */
+    }
+    await this.generateMethods({
+      label: pipeline.name,
+      outdir: session.outdir,
+      runDir: session.runDir ?? session.outdir,
+      pipelineName: pipeline.name,
+      revision: pipeline.version,
+      citation: pipeline.citation,
+      nextflowVersion,
+      engine,
+      query: session.query,
+    });
+  }
+
+  /**
+   * Shared methods generator (Phase 6): builds a paste-ready methods paragraph +
+   * references from the pinned versions, the container engine and the real tool
+   * versions nf-core recorded, and writes METHODS.md. Used for both the primary
+   * run and a chained follow-up.
+   */
+  private async generateMethods(opts: {
+    label: string;
+    outdir: string;
+    runDir: string;
+    pipelineName: string;
+    revision: string;
+    citation?: PipelineCitation;
+    nextflowVersion?: string;
+    engine: string;
+    query: QueryContext;
+  }): Promise<void> {
     const make = await this.io.confirm(
-      "Generate a publication-ready methods paragraph (METHODS.md)?",
+      `Generate a publication-ready methods paragraph (METHODS.md) for ${opts.label}?`,
       true,
     );
     if (!make) return;
 
-    const tools = readSoftwareVersions(session.outdir, pipeline.name);
-    let nextflowVersion: string | undefined;
-    let containerEngine: string = session.engine ?? this.config.execution.containerEngine;
-    try {
-      const manifest = JSON.parse(readFileSync(join(session.runDir ?? "", "run_manifest.json"), "utf8"));
-      nextflowVersion = manifest?.environment?.nextflow;
-      if (manifest?.environment?.containerEngine) containerEngine = manifest.environment.containerEngine;
-    } catch {
-      /* manifest optional */
-    }
-
+    const tools = readSoftwareVersions(opts.outdir, opts.pipelineName);
     const { paragraph, markdown } = buildMethods({
-      pipelineName: pipeline.name,
-      revision: pipeline.version,
-      nextflowVersion,
-      containerEngine,
-      organism: session.query.organism,
-      dataType: session.query.dataType,
+      pipelineName: opts.pipelineName,
+      revision: opts.revision,
+      nextflowVersion: opts.nextflowVersion,
+      containerEngine: opts.engine,
+      organism: opts.query.organism,
+      dataType: opts.query.dataType,
       tools,
-      pipelineCitation: pipeline.citation,
+      pipelineCitation: opts.citation,
     });
 
-    const path = join(session.runDir ?? session.outdir, "METHODS.md");
+    const path = join(opts.runDir, "METHODS.md");
     try {
       writeFileSync(path, markdown, "utf8");
       this.io.info(`Methods written: ${path}`);

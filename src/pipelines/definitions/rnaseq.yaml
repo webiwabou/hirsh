@@ -135,6 +135,14 @@ followUp:
     - path: report
       description: differential abundance HTML report
       kind: directory
+  # differentialabundance is R-based and modest; a light pre-flight, not the heavy
+  # per-process model of an aligner.
+  resources:
+    recommendedMemoryGB: 6
+    minMemoryGB: 2
+    imageFootprintGB: 3
+  citation:
+    text: "nf-core/differentialabundance: differential abundance analysis (nf-core). Available at https://nf-co.re/differentialabundance."
 
 results:
   outdirParam: outdir
