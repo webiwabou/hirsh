@@ -355,15 +355,21 @@ one-off analysis into reusable, community-grade software.
   official-template + lint + full-test-data + review requirements, and the
   request/creation steps — stating plainly that acceptance is a community decision it
   cannot guarantee (`composition/inclusion.ts`, unit-tested).
-- ⬜ **Try-before-you-publish.** A scientist will almost always want to *run* a
-  freshly composed pipeline on their own data before sharing it. Today the compose
-  flow validates it runs (`-stub-run`) and then jumps to packaging/publishing.
-  Planned: after composing, offer to **run it for real** (parameterize with the
-  scientist's inputs + reference params, execute, and interpret the results with
-  the agent) as the natural next step, and reframe packaging/publishing as an
-  ongoing **recommendation** — reminding the scientist, without pushing, that when
-  they're happy they can publish, and inviting their feedback/opinions at each
-  stage — rather than a one-shot linear gate.
+- ✅ **Try-before-you-publish.** Once a composed pipeline validates it runs
+  (`-stub-run`), Hirsh offers to **run it on the scientist's own data** first: it
+  reuses the normal backend/executor selection, asks for the input samplesheet and
+  each reference parameter (all `@`-path aware and skippable), executes it, and
+  gives a light biological interpretation of the outputs (directory listing + HTML
+  reports). Best-effort — a composed pipeline is a draft, so a failed run is
+  reported and the flow continues. Packaging/publishing is now framed as an ongoing
+  **recommendation** rather than a linear gate: a gentle "when you're happy, I can
+  help you share it" before packaging, and a closing reminder that publishing/
+  contributing is always available and feedback welcome
+  (`composition/run.ts::buildComposedRunCommand` unit-tested; `offerComposedRun`
+  wired).
+  - ⬜ Remaining: build the composed pipeline's samplesheet interactively (today
+    the scientist points at an existing CSV), and a fuller results interpretation
+    from the project's declared outputs.
 - 🔵 **Provenance for novelty.** Generated projects already separate what was reused
   from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
   the custom local tools ("not from nf-core"); `modules.json` pins only the real

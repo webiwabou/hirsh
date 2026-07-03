@@ -470,6 +470,11 @@ step), Hirsh builds one from real [nf-core/modules](https://github.com/nf-core/m
 5. If the `nf-core` CLI is available, it offers to run **`nf-core lint`** on the
    project and reports the pass/warn/fail counts and top failures (advisory — a
    freshly composed project isn't fully lint-green yet).
+6. Once it validates, Hirsh offers to **run the pipeline on your own data** — you
+   point it at your samplesheet and any reference parameters (with `@` paths), it
+   executes and gives a plain-language take on the outputs. Only then does it
+   suggest packaging/publishing — as a recommendation you can take whenever you're
+   happy, not a required step.
 
 The wiring connects each module input to the right upstream output by data kind
 (reads, bam, vcf, fasta, indexes, reports…), rebuilds multi-file tuples, carries
