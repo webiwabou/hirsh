@@ -67,9 +67,12 @@ const TOOL: ToolDefinition = {
           "Relevant experimental design: replicates, conditions, paired/unpaired, tumor/normal, etc. null if not applicable or unknown.",
       },
       enough: {
-        type: "boolean",
+        // Some models emit "true"/"false" as strings; allow both so strict
+        // server-side tool validation (e.g. Groq) accepts it — we coerce to a
+        // real boolean with `looseBoolean` when parsing.
+        type: ["boolean", "string"],
         description:
-          "true ONLY if the known information is enough to confidently pick one of the supported pipelines.",
+          "true ONLY if the known information is enough to confidently pick one of the supported pipelines. Prefer a JSON boolean (true/false).",
       },
       nextQuestion: {
         type: ["string", "null"],

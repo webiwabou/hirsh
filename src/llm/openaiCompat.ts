@@ -59,7 +59,9 @@ export class OpenAICompatProvider implements LLMProvider {
         }`,
       );
     }
-    if (!res.ok) throw new ProviderError(await this.describeStatus(res));
+    if (!res.ok) {
+      throw new ProviderError(this.describeStatus(res.status, await res.text().catch(() => "")));
+    }
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {
@@ -94,7 +96,17 @@ export class OpenAICompatProvider implements LLMProvider {
         }`,
       );
     }
-    if (!res.ok) throw new ProviderError(await this.describeStatus(res));
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      // Some servers (e.g. Groq) validate the model's tool call against the tool
+      // schema and 400 when the model emits a wrong type. Treat that as "no valid
+      // tool call this attempt" so callStructured can retry and then fall back,
+      // instead of aborting the whole session on a weak model's slip.
+      if (useTools && res.status === 400 && isToolValidationError(detail)) {
+        return { text: "", toolCalls: [] };
+      }
+      throw new ProviderError(this.describeStatus(res.status, detail));
+    }
 
     return stream ? this.readStream(res, options.onToken!) : this.readSingle(res);
   }
@@ -154,20 +166,24 @@ export class OpenAICompatProvider implements LLMProvider {
     return this.cfg.baseUrl.replace(/\/+$/, "");
   }
 
-  private async describeStatus(res: Response): Promise<string> {
-    const detail = await res.text().catch(() => "");
+  private describeStatus(status: number, detail: string): string {
     const where = `${this.cfg.baseUrl} (model "${this.cfg.model}")`;
-    if (res.status === 401 || res.status === 403) {
-      return `The LLM endpoint rejected the API key (${res.status}) at ${where}. Check the key env var.`;
+    if (status === 401 || status === 403) {
+      return `The LLM endpoint rejected the API key (${status}) at ${where}. Check the key env var.`;
     }
-    if (res.status === 429) {
+    if (status === 429) {
       return `The LLM endpoint returned 429 (rate limit / quota) at ${where}. Wait a moment or check your plan.`;
     }
-    if (res.status === 404) {
+    if (status === 404) {
       return `The LLM endpoint doesn't recognize the model or path (404) at ${where}. Check baseUrl and model.`;
     }
-    return `The LLM endpoint returned status ${res.status} at ${where}${detail ? `: ${detail.slice(0, 300)}` : ""}.`;
+    return `The LLM endpoint returned status ${status} at ${where}${detail ? `: ${detail.slice(0, 300)}` : ""}.`;
   }
+}
+
+/** A server-side rejection of the model's tool call (wrong type / bad schema). */
+function isToolValidationError(detail: string): boolean {
+  return /tool_use_failed|tool call validation|did not match schema/i.test(detail);
 }
 
 function toOpenAIMessage(m: ChatMessage): Record<string, unknown> {

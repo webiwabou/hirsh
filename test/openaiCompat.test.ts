@@ -82,4 +82,43 @@ describe("OpenAICompatProvider.chat", () => {
       /rejected the API key/,
     );
   });
+
+  it("recovers from a strict tool-validation 400 (Groq) instead of aborting", async () => {
+    // Groq validates the model's tool call server-side and 400s on a wrong type.
+    const body = JSON.stringify({
+      error: {
+        message: "tool call validation failed: parameters for tool record_intent did not match schema",
+        code: "tool_use_failed",
+      },
+    });
+    const f = vi.fn(async () => ({ ok: false, status: 400, text: async () => body })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", f);
+
+    const p = new OpenAICompatProvider(cfg, "gsk_test");
+    const resp = await p.chat({
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ name: "record_intent", description: "d", parameters: { type: "object" } }],
+      forceTool: "record_intent",
+    });
+    // No throw: surfaced as "no tool call" so callStructured can retry / fall back.
+    expect(resp).toEqual({ text: "", toolCalls: [] });
+  });
+
+  it("still throws on an unrelated 400", async () => {
+    const f = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: { message: "context length exceeded" } }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", f);
+
+    const p = new OpenAICompatProvider(cfg, "gsk_test");
+    await expect(
+      p.chat({
+        messages: [{ role: "user", content: "hi" }],
+        tools: [{ name: "t", description: "d", parameters: { type: "object" } }],
+        forceTool: "t",
+      }),
+    ).rejects.toThrow(/status 400/);
+  });
 });
