@@ -97,7 +97,7 @@ import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
 import type { ResolvedComposition } from "../composition/types.js";
 import { initAndCommit, isGitAvailable } from "../execution/git.js";
 import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
-import { extractIntent } from "./intentExtraction.js";
+import { extractIntent, hasEnoughContext, isDuplicateQuestion } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
 import { designReviewApplies, reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
 import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
@@ -204,6 +204,7 @@ export class Agent {
       session.transcript.push({ role: "user", text: first });
     }
 
+    const asked: string[] = [];
     for (let round = 0; round < MAX_INTENT_ROUNDS; round++) {
       const intent = await this.io.withSpinner("Analyzing your request", () =>
         extractIntent(this.provider, this.registry, session.transcript),
@@ -217,9 +218,22 @@ export class Agent {
 
       if (intent.enough) return;
 
+      // Anti-redundancy guards (a weak model tends to keep probing): once the core
+      // fields are known, move on; and never re-ask an effectively duplicate
+      // question. The user can still correct things at pipeline selection.
+      if (hasEnoughContext(session.query)) {
+        this.io.info("Got it — I have enough to get started (you can correct me at the next step).");
+        return;
+      }
+
       const question =
         intent.nextQuestion ??
         "Could you give me more details about the organism, data type and your objective?";
+      if (isDuplicateQuestion(question, asked)) {
+        this.io.info("Let's continue with what I have — you can refine it as we go.");
+        return;
+      }
+      asked.push(question);
       this.io.say(question);
       session.transcript.push({ role: "agent", text: question });
       const answer = await this.io.ask("");

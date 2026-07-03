@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractIntent } from "../src/conversation/intentExtraction.js";
+import {
+  extractIntent,
+  hasEnoughContext,
+  isDuplicateQuestion,
+} from "../src/conversation/intentExtraction.js";
 import type { ChatOptions, ChatResponse, LLMProvider, ToolCall } from "../src/llm/provider.js";
 
 class MockProvider implements LLMProvider {
@@ -11,6 +15,34 @@ class MockProvider implements LLMProvider {
   }
 }
 const call = (args: Record<string, unknown>): ToolCall => ({ id: "1", name: "record_intent", arguments: args });
+
+describe("hasEnoughContext", () => {
+  it("is true only when organism, dataType and objective are all set", () => {
+    expect(hasEnoughContext({ organism: "human", dataType: "protein", objective: "graph" })).toBe(true);
+    expect(hasEnoughContext({ organism: "human", dataType: "protein" })).toBe(false);
+    expect(hasEnoughContext({ organism: "human", dataType: "  ", objective: "x" })).toBe(false);
+    expect(hasEnoughContext({})).toBe(false);
+  });
+});
+
+describe("isDuplicateQuestion", () => {
+  it("flags a near-duplicate clarifying question", () => {
+    const asked = ["Do you have multiple protein sequences to compare or just one?"];
+    expect(
+      isDuplicateQuestion("Do you have multiple protein sequences to group, or just one?", asked),
+    ).toBe(true);
+  });
+
+  it("does not flag a genuinely different question", () => {
+    const asked = ["What organism is this from?"];
+    expect(isDuplicateQuestion("What is the sequencing data type?", asked)).toBe(false);
+  });
+
+  it("is false against an empty history or an empty candidate", () => {
+    expect(isDuplicateQuestion("anything at all here?", [])).toBe(false);
+    expect(isDuplicateQuestion("", ["a real question about the organism?"])).toBe(false);
+  });
+});
 
 describe("extractIntent — tolerant of a stringified boolean", () => {
   it("coerces enough:'false' (as some models emit) to a real boolean", async () => {

@@ -20,6 +20,7 @@ import {
   type ToolDefinition,
 } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
+import type { QueryContext } from "./session.js";
 
 const intentSchema = z.object({
   organism: nullableText,
@@ -84,6 +85,41 @@ const TOOL: ToolDefinition = {
   },
 };
 
+/** True once the core fields needed to attempt pipeline selection are all known. */
+export function hasEnoughContext(query: QueryContext): boolean {
+  return Boolean(query.organism?.trim() && query.dataType?.trim() && query.objective?.trim());
+}
+
+const QUESTION_STOPWORDS = new Set([
+  "do", "you", "have", "the", "for", "your", "would", "like", "with", "what", "which",
+  "and", "are", "this", "that", "want", "into", "just", "any", "such", "there", "does",
+  "is", "of", "to", "a", "or", "in", "on", "an", "as", "it", "me", "my",
+]);
+
+function questionTokens(q: string): string[] {
+  return q
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !QUESTION_STOPWORDS.has(w));
+}
+
+/**
+ * True if a candidate clarifying question substantially repeats one already asked
+ * (so the loop shouldn't ask it again). Compares meaningful-token overlap. Pure.
+ */
+export function isDuplicateQuestion(candidate: string, asked: string[]): boolean {
+  const c = new Set(questionTokens(candidate));
+  if (c.size === 0) return false;
+  for (const prev of asked) {
+    const t = questionTokens(prev);
+    if (t.length === 0) continue;
+    const overlap = t.filter((w) => c.has(w)).length;
+    if (overlap / Math.min(c.size, t.length) >= 0.6) return true;
+  }
+  return false;
+}
+
 function systemPrompt(registry: PipelineDefinition[]): string {
   const catalog = registry
     .map((p) => `- ${p.name}: ${p.purpose} (data: ${p.dataType})`)
@@ -99,7 +135,10 @@ function systemPrompt(registry: PipelineDefinition[]): string {
     catalog,
     "",
     "Rules:",
-    "- Set enough=true once you can confidently tell which pipeline applies.",
+    "- Set enough=true once you can confidently tell which pipeline applies, OR once you already",
+    "  know the organism, the data/sequencing type AND the objective — then STOP asking.",
+    "- NEVER re-ask something the user has already told you, and never ask a question you have",
+    "  effectively already asked. Read the whole conversation first.",
     "- If something critical is missing, ask ONE clear question (nextQuestion), not several.",
     "- Do not ask about parameter details yet (that is a later phase).",
     "- ALWAYS respond by calling the record_intent tool.",
