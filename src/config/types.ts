@@ -1,6 +1,6 @@
 /** Hirsh configuration types. */
 
-export type ProviderName = "ollama" | "anthropic";
+export type ProviderName = "ollama" | "anthropic" | "openai";
 /**
  * Execution backend for Nextflow. "docker"/"singularity" are container engines;
  * "conda"/"mamba" resolve tools into environments instead of containers. Each
@@ -18,6 +18,22 @@ export interface AnthropicConfig {
   /** Name of the environment variable holding the API key. */
   apiKeyEnv: string;
   model: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+/**
+ * Any OpenAI-compatible chat endpoint: free tiers (Groq, Google Gemini's
+ * OpenAI-compat endpoint, Cerebras, OpenRouter), OpenAI itself, or a local
+ * vLLM/LM Studio server. `apiKeyEnv` names the env var with the key (optional for
+ * keyless local endpoints).
+ */
+export interface OpenAICompatConfig {
+  /** Base URL up to /v1, e.g. https://api.groq.com/openai/v1 */
+  baseUrl: string;
+  model: string;
+  /** Name of the environment variable holding the API key (may be unset locally). */
+  apiKeyEnv: string;
   temperature: number;
   maxTokens: number;
 }
@@ -62,6 +78,7 @@ export interface HirshConfig {
   provider: ProviderName;
   ollama: OllamaConfig;
   anthropic: AnthropicConfig;
+  openai: OpenAICompatConfig;
   execution: ExecutionConfig;
   memory: MemoryConfig;
   autonomy: AutonomyConfig;

@@ -1,8 +1,9 @@
 /** LLM provider factory: maps config to the concrete adapter. */
-import { resolveAnthropicApiKey } from "../config/loadConfig.js";
+import { resolveAnthropicApiKey, resolveOpenAIApiKey } from "../config/loadConfig.js";
 import type { HirshConfig } from "../config/types.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { OllamaProvider } from "./ollama.js";
+import { OpenAICompatProvider } from "./openaiCompat.js";
 import { type LLMProvider, ProviderError } from "./provider.js";
 
 export * from "./provider.js";
@@ -26,6 +27,10 @@ export function createProvider(config: HirshConfig): LLMProvider {
         );
       }
       return new AnthropicProvider(config.anthropic, apiKey);
+    }
+    case "openai": {
+      // Key is optional: keyless local endpoints (vLLM/LM Studio) work too.
+      return new OpenAICompatProvider(config.openai, resolveOpenAIApiKey(config));
     }
     default: {
       // Exhaustiveness: if a provider is added to ProviderName without handling

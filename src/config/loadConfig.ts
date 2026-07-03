@@ -20,6 +20,7 @@ import type {
   HirshConfig,
   MemoryConfig,
   OllamaConfig,
+  OpenAICompatConfig,
   ProviderName,
 } from "./types.js";
 
@@ -40,6 +41,15 @@ const DEFAULT_OLLAMA: OllamaConfig = {
 const DEFAULT_ANTHROPIC: AnthropicConfig = {
   apiKeyEnv: "ANTHROPIC_API_KEY",
   model: "claude-fable-5",
+  temperature: 0.2,
+  maxTokens: 4096,
+};
+
+// Defaults point at Groq's free tier (OpenAI-compatible, tool-calling capable).
+const DEFAULT_OPENAI: OpenAICompatConfig = {
+  baseUrl: "https://api.groq.com/openai/v1",
+  model: "llama-3.3-70b-versatile",
+  apiKeyEnv: "GROQ_API_KEY",
   temperature: 0.2,
   maxTokens: 4096,
 };
@@ -105,6 +115,7 @@ export function loadConfig(): { config: HirshConfig; sourcePath: string | null }
     provider,
     ollama: mergeOllama(raw.ollama),
     anthropic: mergeAnthropic(raw.anthropic),
+    openai: mergeOpenAI(raw.openai),
     execution: mergeExecution(raw.execution),
     memory: mergeMemory(raw.memory),
     autonomy: mergeAutonomy(raw.autonomy),
@@ -136,9 +147,9 @@ function mergeMemory(value: unknown): MemoryConfig {
 
 function normalizeProvider(value: unknown): ProviderName {
   if (value === undefined) return "ollama";
-  if (value === "ollama" || value === "anthropic") return value;
+  if (value === "ollama" || value === "anthropic" || value === "openai") return value;
   throw new ConfigError(
-    `Invalid provider: "${String(value)}". Allowed values: "ollama" or "anthropic".`,
+    `Invalid provider: "${String(value)}". Allowed values: "ollama", "anthropic" or "openai".`,
   );
 }
 
@@ -168,6 +179,19 @@ function mergeAnthropic(value: unknown): AnthropicConfig {
         : DEFAULT_ANTHROPIC.temperature,
     maxTokens:
       typeof value.maxTokens === "number" ? value.maxTokens : DEFAULT_ANTHROPIC.maxTokens,
+  };
+}
+
+function mergeOpenAI(value: unknown): OpenAICompatConfig {
+  if (value === undefined) return { ...DEFAULT_OPENAI };
+  if (!isRecord(value)) throw new ConfigError('The "openai" section must be a map.');
+  return {
+    baseUrl: typeof value.baseUrl === "string" ? value.baseUrl : DEFAULT_OPENAI.baseUrl,
+    model: typeof value.model === "string" ? value.model : DEFAULT_OPENAI.model,
+    apiKeyEnv: typeof value.apiKeyEnv === "string" ? value.apiKeyEnv : DEFAULT_OPENAI.apiKeyEnv,
+    temperature:
+      typeof value.temperature === "number" ? value.temperature : DEFAULT_OPENAI.temperature,
+    maxTokens: typeof value.maxTokens === "number" ? value.maxTokens : DEFAULT_OPENAI.maxTokens,
   };
 }
 
@@ -206,5 +230,14 @@ function mergeExecution(value: unknown): ExecutionConfig {
  */
 export function resolveAnthropicApiKey(config: HirshConfig): string | null {
   const key = process.env[config.anthropic.apiKeyEnv];
+  return key && key.trim().length > 0 ? key : null;
+}
+
+/**
+ * Resolves the OpenAI-compatible API key from the configured env var. Returns
+ * null if unset — acceptable for keyless local endpoints.
+ */
+export function resolveOpenAIApiKey(config: HirshConfig): string | null {
+  const key = process.env[config.openai.apiKeyEnv];
   return key && key.trim().length > 0 ? key : null;
 }

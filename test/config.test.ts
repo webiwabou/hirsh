@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ConfigError, loadConfig, resolveAnthropicApiKey } from "../src/config/loadConfig.js";
+import {
+  ConfigError,
+  loadConfig,
+  resolveAnthropicApiKey,
+  resolveOpenAIApiKey,
+} from "../src/config/loadConfig.js";
 
 function writeTempConfig(contents: string): string {
   const dir = mkdtempSync(join(tmpdir(), "hirsh-cfg-"));
@@ -14,6 +19,7 @@ function writeTempConfig(contents: string): string {
 afterEach(() => {
   delete process.env.HIRSH_CONFIG;
   delete process.env.MY_TEST_KEY;
+  delete process.env.GROQ_API_KEY;
 });
 
 describe("loadConfig", () => {
@@ -31,8 +37,22 @@ describe("loadConfig", () => {
   });
 
   it("rejects an invalid provider", () => {
-    process.env.HIRSH_CONFIG = writeTempConfig("provider: openai\n");
+    process.env.HIRSH_CONFIG = writeTempConfig("provider: bogus\n");
     expect(() => loadConfig()).toThrow(ConfigError);
+  });
+
+  it("supports the openai-compatible provider with Groq defaults and env key", () => {
+    process.env.HIRSH_CONFIG = writeTempConfig(
+      ["provider: openai", "openai:", "  model: llama-3.1-8b-instant"].join("\n"),
+    );
+    const { config } = loadConfig();
+    expect(config.provider).toBe("openai");
+    expect(config.openai.baseUrl).toBe("https://api.groq.com/openai/v1"); // default
+    expect(config.openai.model).toBe("llama-3.1-8b-instant"); // overridden
+    expect(config.openai.apiKeyEnv).toBe("GROQ_API_KEY"); // default
+    expect(resolveOpenAIApiKey(config)).toBeNull();
+    process.env.GROQ_API_KEY = "gsk_test";
+    expect(resolveOpenAIApiKey(config)).toBe("gsk_test");
   });
 
   it("resolves the API key from the named env var", () => {
