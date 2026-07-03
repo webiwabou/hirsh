@@ -215,9 +215,10 @@ When Hirsh asks for a **folder or file path**, you can:
 - **change your mind** — e.g. answer "actually, run the test profile" and Hirsh
   switches to the bundled test data instead of treating your sentence as a path.
 
-Many prompts offer **recommended options** — in a rich terminal these are an
-**arrow-key menu** (↑/↓ then Enter), each option with a plain-language description,
-a recommended default, and a "Something else (type it)" row for a free-text answer.
+Confirmations and option prompts are **arrow-key menus** in a rich terminal — for
+a yes/no you just arrow to Yes or No and press Enter (no typing). Option prompts
+show a short list, each with a plain-language description, a recommended default,
+and a "Something else (type it)" row for a free-text answer.
 So you don't need to know nf-core jargon to (for example) add your own tool to a
 composed pipeline. (On a basic terminal it falls back to a numbered prompt.)
 

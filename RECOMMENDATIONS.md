@@ -62,12 +62,15 @@ parameterize → confirm → run → interpret.
     for non-interactive terminals (`AgentIO.select`, `chooseWith` delegates;
     unit-tested via a stub). Typing `/` then Tab completes commands, and **`@path`
     references Tab-complete against the filesystem** (`parseAtToken`, unit-tested).
-  - ⬜ Remaining: make the yes/no **confirmations** arrow-selectable too; apply the
-    options prompt to the remaining selections (execution backend/executor,
-    LLM-proposed gap tools); live-color the `@` fragment as it's typed and a fuller
-    inline command dropdown; reduce redundant intent questions; and fuller free-form
-    redirection everywhere (treat any answer as a possible new instruction/question
-    and re-plan, closer to a coding agent).
+  - ✅ **Arrow-key confirmations.** Yes/No prompts are an arrow menu too (select the
+    pointer, no typing), with the natural-language text confirm as the fallback.
+  - ⬜ Remaining: **multi-line paste** — a pasted FASTA sequence (with newlines) is
+    submitted line-by-line by readline and gets truncated; capture bracketed-paste
+    so a pasted block is one input (workaround today: save to a file and use `@`).
+    Also: apply the options prompt to the remaining selections (execution backend/
+    executor, LLM-proposed gap tools); live-color the `@` fragment as it's typed and
+    a fuller inline command/@ dropdown (today it's Tab-completion); reduce redundant
+    intent questions; and fuller free-form redirection everywhere.
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
@@ -375,10 +378,15 @@ one-off analysis into reusable, community-grade software.
   help you share it" before packaging, and a closing reminder that publishing/
   contributing is always available and feedback welcome
   (`composition/run.ts::buildComposedRunCommand` unit-tested; `offerComposedRun`
-  wired).
-  - ⬜ Remaining: build the composed pipeline's samplesheet interactively (today
-    the scientist points at an existing CSV), and a fuller results interpretation
-    from the project's declared outputs.
+  wired). The scientist can also choose to **run the composed pipeline's `test`
+  profile** first (a smoke test on placeholder data, labelled honestly), and if a
+  real run is chosen without an input samplesheet Hirsh doesn't launch a doomed run
+  — it warns and offers the test profile instead.
+  - ⬜ Remaining: **build the composed pipeline's samplesheet for the scientist**
+    from a sequence/FASTA they already gave (today they must point at an existing
+    CSV — a scientist who pasted a single FASTA expects Hirsh to make the sheet);
+    bundle realistic test data so the test profile gives *real* results, not just a
+    smoke test; and a fuller results interpretation from declared outputs.
 - 🔵 **Provenance for novelty.** Generated projects already separate what was reused
   from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
   the custom local tools ("not from nf-core"); `modules.json` pins only the real
