@@ -38,9 +38,9 @@ params:
   - name: clustering_tool
     type: enum
     required: false
-    default: mmseqs
-    choices: [mmseqs, linclust]
-    description: Sequence clustering algorithm. mmseqs is the most general.
+    default: linclust
+    choices: [linclust, cluster]
+    description: MMseqs2 clustering mode — 'linclust' (fast, linear-time) or 'cluster' (more sensitive).
   - name: cluster_seq_identity
     type: number
     required: false

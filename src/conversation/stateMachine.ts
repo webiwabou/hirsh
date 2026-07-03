@@ -52,6 +52,7 @@ import {
   sumFileSizes,
 } from "../execution/staging.js";
 import { runNextflow } from "../execution/runner.js";
+import { parseInvalidParams } from "../execution/nextflowErrors.js";
 import {
   buildFetchngsCommand,
   detectAccessions,
@@ -1801,6 +1802,7 @@ export class Agent {
     runDir: string,
     env: EnvReport,
     resume: boolean,
+    allowFix = true,
   ): Promise<boolean> {
     session.command = applyResume(session.command ?? [], resume);
 
@@ -1814,10 +1816,55 @@ export class Agent {
         this.io.say("Relevant error detail:");
         this.io.say(result.errorSummary);
       }
+      // Self-correction: if it's an invalid-parameter validation error, offer to
+      // fix the offending value(s) and run again (once) instead of failing blindly.
+      if (allowFix) {
+        const fixed = await this.tryFixInvalidParams(session, runDir, env, result.errorSummary ?? "");
+        if (fixed !== null) return fixed;
+      }
       return false;
     }
     this.io.say("Run completed successfully.");
     return true;
+  }
+
+  /**
+   * Reads an nf-core parameter-validation failure and offers to correct the
+   * invalid value(s) to an allowed one, then re-runs once. Returns the re-run's
+   * outcome, or null when there's nothing recognizable to fix / the user declines.
+   */
+  private async tryFixInvalidParams(
+    session: Session,
+    runDir: string,
+    env: EnvReport,
+    errorText: string,
+  ): Promise<boolean | null> {
+    const pipeline = session.selectedPipeline;
+    if (!pipeline) return null;
+    const invalid = parseInvalidParams(errorText);
+    if (invalid.length === 0) return null;
+
+    this.io.warn("It failed because some parameters had invalid values:");
+    for (const p of invalid) {
+      this.io.info(`  • --${p.param} = "${p.value}" isn't allowed — valid: ${p.allowed.join(", ")}`);
+    }
+    const fix = await this.io.confirm("Let me fix these to a valid value and run again?", true);
+    if (!fix) return null;
+
+    for (const p of invalid) {
+      const chosen = await chooseWith(
+        this.io,
+        `Value for --${p.param}:`,
+        p.allowed.map((v) => ({ value: v, label: v, recommended: v === p.allowed[0] })),
+        { allowCustom: false },
+      );
+      session.paramValues[p.param] = chosen;
+      if (p.param === pipeline.results.outdirParam) session.outdir = String(chosen);
+      this.io.info(`Set --${p.param} = ${chosen}.`);
+    }
+    finalizeCommand(session, pipeline, this.config);
+    // Re-run once (no further auto-fix, so a persistent error can't loop).
+    return this.executeAndReport(session, runDir, env, false, false);
   }
 
   /**
