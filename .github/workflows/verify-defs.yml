@@ -1,0 +1,22 @@
+name: Verify definitions
+
+# Checks each curated pipeline definition against the real upstream
+# nextflow_schema.json (params exist; enum defaults/choices are valid). It needs
+# network access, so it runs on a schedule and on demand rather than on every PR
+# (to keep PR checks fast and free of upstream-availability flakiness).
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  verify-defs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:defs
