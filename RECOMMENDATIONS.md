@@ -43,6 +43,14 @@ parameterize → confirm → run → interpret.
     choice the user can answer in free text ("actually it's paired-end WGS") to have
     Hirsh fold that back into the intent and reconsider (`conversation/answers.ts`,
     `confirmOrText`).
+  - ✅ **Path prompts are lenient too.** A "give me a directory" answer is classified
+    rather than blindly used as a path: an explicit `@path` reference (spaces
+    allowed), a bare path, or a change of mind ("actually, run the test profile") →
+    switch to the test profile. Unclear answers re-ask with guidance instead of
+    silently failing with "no files found" (`conversation/pathInput.ts`, unit-tested).
+  - ⬜ Remaining: fuller free-form redirection everywhere (treat any prompt's answer
+    as a possible new instruction/question and re-plan, closer to a coding agent),
+    not just the file/confirmation prompts.
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before

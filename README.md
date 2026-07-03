@@ -209,6 +209,12 @@ Confirmations are conversational: besides `y`/`n` you can answer naturally
 language (e.g. "actually it's paired-end WGS") to have Hirsh reconsider instead
 of just accepting or rejecting.
 
+When Hirsh asks for a **folder or file path**, you can:
+- reference a path explicitly with **`@`** — e.g. `@/data/reads` (this also lets
+  paths with spaces through: `@/home/My Data/reads`), or just type a bare path;
+- **change your mind** — e.g. answer "actually, run the test profile" and Hirsh
+  switches to the bundled test data instead of treating your sentence as a path.
+
 ### Example session
 
 ```
