@@ -215,6 +215,13 @@ When Hirsh asks for a **folder or file path**, you can:
 - **change your mind** — e.g. answer "actually, run the test profile" and Hirsh
   switches to the bundled test data instead of treating your sentence as a path.
 
+Many prompts offer **recommended options** — a short numbered list, each with a
+plain-language description and a recommended default. Pick a number, type a label,
+or **type your own** custom answer; press Enter to take the recommendation. So you
+don't need to know nf-core jargon to (for example) add your own tool to a composed
+pipeline. Type **`/`** then **Tab** to complete a command (`/help`, `/status`,
+`/reset`, `/exit`).
+
 ### Example session
 
 ```

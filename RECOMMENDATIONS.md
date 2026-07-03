@@ -48,9 +48,21 @@ parameterize → confirm → run → interpret.
     allowed), a bare path, or a change of mind ("actually, run the test profile") →
     switch to the test profile. Unclear answers re-ask with guidance instead of
     silently failing with "no files found" (`conversation/pathInput.ts`, unit-tested).
-  - ⬜ Remaining: fuller free-form redirection everywhere (treat any prompt's answer
-    as a possible new instruction/question and re-plan, closer to a coding agent),
-    not just the file/confirmation prompts.
+  - ✅ **Recommended-options prompts** ("pick one, or type your own"). Where a
+    scientist would otherwise face nf-core jargon, Hirsh presents numbered options
+    with a plain-language description and a recommended default, still accepting a
+    number, a label, an `@path`, or free text (`conversation/choice.ts`,
+    unit-tested). Applied to the custom-tool collector (software env, input/output
+    kinds, patterns) so someone who has never used Nextflow can add their own tool;
+    output kinds are sanitized so a stray answer can't produce a broken file
+    pattern. `@` path references work at file prompts too.
+  - ✅ **Slash-command affordance.** Typing `/` then Tab completes among
+    `/help /status /reset /exit`, and a bare `/` lists them (Claude-Code-style).
+  - ⬜ Remaining: apply the recommended-options prompt to the remaining selections
+    (execution backend/executor, LLM-proposed gap tools); a fuller inline command
+    dropdown (today it's Tab-completion); reduce redundant intent questions; and
+    fuller free-form redirection everywhere (treat any prompt's answer as a possible
+    new instruction/question and re-plan, closer to a coding agent).
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
@@ -298,7 +310,12 @@ validates that it **runs end-to-end** — a composed pipeline executes via
     minimal custom tool (command sketch, I/O kinds, conda/container if a real tool
     fits) for each gap, which the scientist reviews before it's added
     (`composition/localToolProposal.ts`, schema-validated, unit-tested).
-  - ⬜ Remaining: multi-input local modules, and per-tool test data.
+  - ✅ The manual custom-tool collector is now **scientist-friendly**: recommended
+    options with plain descriptions instead of nf-core jargon (see Phase 1).
+  - ⬜ Remaining: multi-input local modules, per-tool test data, and a
+    **visualization output** convention (a graph/network or an interactive HTML
+    report as a first-class, recommended output kind) so composed analyses can be
+    *seen*, not just produced.
 
 ## Phase 5 — Contributing back to the community 🔵 (largely shipped)
 
@@ -338,6 +355,15 @@ one-off analysis into reusable, community-grade software.
   official-template + lint + full-test-data + review requirements, and the
   request/creation steps — stating plainly that acceptance is a community decision it
   cannot guarantee (`composition/inclusion.ts`, unit-tested).
+- ⬜ **Try-before-you-publish.** A scientist will almost always want to *run* a
+  freshly composed pipeline on their own data before sharing it. Today the compose
+  flow validates it runs (`-stub-run`) and then jumps to packaging/publishing.
+  Planned: after composing, offer to **run it for real** (parameterize with the
+  scientist's inputs + reference params, execute, and interpret the results with
+  the agent) as the natural next step, and reframe packaging/publishing as an
+  ongoing **recommendation** — reminding the scientist, without pushing, that when
+  they're happy they can publish, and inviting their feedback/opinions at each
+  stage — rather than a one-shot linear gate.
 - 🔵 **Provenance for novelty.** Generated projects already separate what was reused
   from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
   the custom local tools ("not from nf-core"); `modules.json` pins only the real
