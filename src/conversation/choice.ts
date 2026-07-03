@@ -48,11 +48,14 @@ export async function chooseWith(
   io: AgentIO,
   question: string,
   options: ChoiceOption[],
-  opts: { customHint?: string } = {},
+  opts: { customHint?: string; allowCustom?: boolean } = {},
 ): Promise<string> {
   // Rich terminal: arrow-key selection. Otherwise a numbered text prompt.
   if (io.select) {
-    return io.select(question, options, { allowCustom: true, customLabel: opts.customHint });
+    return io.select(question, options, {
+      allowCustom: opts.allowCustom ?? true,
+      customLabel: opts.customHint,
+    });
   }
   io.say(question);
   options.forEach((o, i) => {

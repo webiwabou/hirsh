@@ -23,14 +23,18 @@ export interface ComposedRunOptions {
   refParams: ComposedRunParam[];
   /** Extra `-c` config files (e.g. the executor config). */
   extraConfigs?: string[];
+  /** Use the composed pipeline's `test` profile (placeholder data; no input needed). */
+  test?: boolean;
 }
 
 /** Builds the `nextflow run …` argument list for a composed pipeline. Pure. */
 export function buildComposedRunCommand(opts: ComposedRunOptions): string[] {
-  const args = ["run", opts.dir, "-profile", opts.engine];
-  if (opts.input) args.push("--input", opts.input);
+  const profile = opts.test ? `test,${opts.engine}` : opts.engine;
+  const args = ["run", opts.dir, "-profile", profile];
+  // The test profile provides its own input; a real run passes the samplesheet.
+  if (!opts.test && opts.input) args.push("--input", opts.input);
   args.push("--outdir", opts.outdir);
-  for (const p of opts.refParams) args.push(`--${p.name}`, p.value);
+  if (!opts.test) for (const p of opts.refParams) args.push(`--${p.name}`, p.value);
   for (const c of opts.extraConfigs ?? []) args.push("-c", c);
   return args;
 }

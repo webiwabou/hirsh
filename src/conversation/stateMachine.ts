@@ -100,9 +100,10 @@ import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
 import { designReviewApplies, reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
-import { classifyPathAnswer } from "./pathInput.js";
+import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
+import { chooseWith } from "./choice.js";
 import { selectPipeline } from "./pipelineSelection.js";
-import type { AgentIO } from "./io.js";
+import type { AgentIO, ChoiceOption } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
 
 type SelectOutcome =
@@ -678,24 +679,67 @@ export class Agent {
     result: GenerationResult,
     resolved: ResolvedComposition,
   ): Promise<void> {
-    const go = await this.io.confirm(
-      "Try this pipeline on your own data now (a real run)?",
-      true,
-    );
-    if (!go) {
+    // A composed project always carries a `test` profile — offer it as a smoke
+    // test, since a scientist will usually want to try it before wiring real data.
+    const hasTest = existsSync(join(result.dir, "conf", "test.config"));
+    const choices: ChoiceOption[] = [
+      { value: "data", label: "Run it on my own data", recommended: true },
+    ];
+    if (hasTest) {
+      choices.push({
+        value: "test",
+        label: "Run the test profile first",
+        description: "placeholder data — a quick smoke test that it executes, not real results",
+      });
+    }
+    choices.push({ value: "no", label: "Not now" });
+
+    const pick = await chooseWith(this.io, "Try this pipeline now?", choices, { allowCustom: false });
+    if (pick === "no") {
       this.io.info("Okay — you can run it later; I'll show the exact command at the end.");
       return;
     }
 
-    // Choose backend + executor (reuses the normal selection; writes any -c config).
+    // Backend selection applies to any run; the executor only to a real data run.
     await this.phaseEnvironment(session);
-    await this.phaseExecutor(session, result.dir);
     const engine = session.engine ?? this.config.execution.containerEngine;
+    if (pick === "test" || (pick !== "data" && wantsTestProfile(pick))) {
+      await this.runComposedTestProfile(session, result, resolved, engine);
+      return;
+    }
 
-    // Samplesheet (--input) and any reference parameters, all path-aware (@).
+    await this.phaseExecutor(session, result.dir);
     const input = await this.askComposedPath(
       "Path to your input samplesheet CSV (reference with @, or Enter to skip):",
     );
+
+    // Without an input, a composed pipeline that reads a samplesheet will fail —
+    // don't launch a doomed run; offer the test profile instead.
+    if (!input) {
+      this.io.warn("This pipeline expects an input samplesheet — without one the run will fail.");
+      const alt = await chooseWith(
+        this.io,
+        "What would you like to do?",
+        [
+          ...(hasTest
+            ? [{ value: "test", label: "Run the test profile instead", recommended: true, description: "placeholder data — a smoke test" }]
+            : []),
+          { value: "anyway", label: "Try the real run anyway" },
+          { value: "no", label: "Cancel" },
+        ],
+        { allowCustom: false },
+      );
+      if (alt === "no") {
+        this.io.info("Okay — not running. The command is shown at the end.");
+        return;
+      }
+      if (alt === "test") {
+        await this.runComposedTestProfile(session, result, resolved, engine);
+        return;
+      }
+      // "anyway" → fall through to the real run.
+    }
+
     const refParams: ComposedRunParam[] = [];
     if (result.referenceParams.length > 0) {
       this.io.info(
@@ -708,38 +752,67 @@ export class Agent {
       }
     }
 
-    const outdir = join(result.dir, "results");
-    const env = await this.ensureNextflow(engine);
-    if (!env) {
-      this.io.warn("Can't run — Nextflow or the backend isn't available. The command is shown at the end.");
-      return;
-    }
-
     const command = buildComposedRunCommand({
       dir: result.dir,
       engine,
       input: input || undefined,
-      outdir,
+      outdir: join(result.dir, "results"),
       refParams,
       extraConfigs: session.executorConfigPath ? [session.executorConfigPath] : [],
     });
+    await this.executeComposed(session, resolved, {
+      command,
+      engine,
+      dir: result.dir,
+      outdir: join(result.dir, "results"),
+    });
+  }
+
+  /** Runs the composed pipeline's `test` profile (placeholder data — a smoke test). */
+  private async runComposedTestProfile(
+    session: Session,
+    result: GenerationResult,
+    resolved: ResolvedComposition,
+    engine: ContainerEngine,
+  ): Promise<void> {
+    this.io.info(
+      "Heads-up: a composed pipeline's test profile uses placeholder data — a quick check that it " +
+        "executes end-to-end, not real biological results (real test data is a later step).",
+    );
+    const outdir = join(result.dir, "results_test");
+    const command = buildComposedRunCommand({ dir: result.dir, engine, outdir, refParams: [], test: true });
+    await this.executeComposed(session, resolved, { command, engine, dir: result.dir, outdir });
+  }
+
+  /** Shared: env-check, show command, confirm, run, and interpret a composed run. */
+  private async executeComposed(
+    session: Session,
+    resolved: ResolvedComposition,
+    opts: { command: string[]; engine: ContainerEngine; dir: string; outdir: string },
+  ): Promise<void> {
+    if (!(await this.ensureNextflow(opts.engine))) {
+      this.io.warn("Can't run — Nextflow or the backend isn't available. The command is shown at the end.");
+      return;
+    }
     this.io.say("Command to run:");
-    this.io.say("  nextflow " + command.join(" "));
+    this.io.say("  nextflow " + opts.command.join(" "));
     const run = await this.io.confirm("Run it now?", true, { auto: true });
     if (!run) {
       this.io.info("Not running. The command is ready above.");
       return;
     }
-
     this.io.heading(`Running ${resolved.plan.pipelineName} (live log)`);
-    const res = await runNextflow(command, result.dir, this.io, session.runEnv);
+    const res = await runNextflow(opts.command, opts.dir, this.io, session.runEnv);
     if (res.exitCode !== 0) {
-      this.io.warn(`The run exited with an error (code ${res.exitCode}). Composed pipelines are drafts — this may need a wiring or parameter fix.`);
+      this.io.warn(
+        `The run exited with an error (code ${res.exitCode}). Composed pipelines are drafts — this may ` +
+          "need a wiring or parameter fix.",
+      );
       if (res.errorSummary) this.io.say(res.errorSummary);
       return;
     }
     this.io.say("Run completed successfully.");
-    await this.interpretComposedRun(session, resolved, outdir);
+    await this.interpretComposedRun(session, resolved, opts.outdir);
   }
 
   /** Asks for a path/value with `@` reference support; empty means skip. */

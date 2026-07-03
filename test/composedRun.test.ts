@@ -42,4 +42,18 @@ describe("buildComposedRunCommand", () => {
     expect(cmd).toEqual(["run", ".", "-profile", "singularity", "--outdir", "results"]);
     expect(cmd).not.toContain("--input");
   });
+
+  it("uses the test profile (and ignores input/ref params) when test=true", () => {
+    const cmd = buildComposedRunCommand({
+      dir: "/p",
+      engine: "docker",
+      input: "/data/ss.csv",
+      outdir: "/p/results_test",
+      refParams: [{ name: "fasta", value: "/ref/x.fa" }],
+      test: true,
+    });
+    expect(cmd).toEqual(["run", "/p", "-profile", "test,docker", "--outdir", "/p/results_test"]);
+    expect(cmd).not.toContain("--input"); // test profile provides its own data
+    expect(cmd).not.toContain("--fasta");
+  });
 });
