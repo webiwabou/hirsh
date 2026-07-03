@@ -5,7 +5,7 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
@@ -60,7 +60,12 @@ import {
 } from "../execution/fetchngs.js";
 import {
   fastqPairsFromSamplesheet,
+  inferPairs,
+  previewCsv,
+  scanFastqs,
+  scanSequenceDir,
   validateSamplesheetContent,
+  writeCsv,
   type FastqPair,
 } from "../execution/samplesheet.js";
 import {
@@ -88,7 +93,12 @@ import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline, type GenerationResult } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
-import { buildComposedRunCommand, type ComposedRunParam } from "../composition/run.js";
+import {
+  buildComposedRunCommand,
+  composedRowsFromFiles,
+  type ComposedRunParam,
+  type ComposedSheetRow,
+} from "../composition/run.js";
 import { collectLocalTool, toNfCoreModule, type LocalToolSpec } from "../composition/localModule.js";
 import { proposeLocalTools } from "../composition/localToolProposal.js";
 import { writeContribution } from "../composition/contribution.js";
@@ -723,9 +733,7 @@ export class Agent {
     }
 
     await this.phaseExecutor(session, result.dir);
-    const input = await this.askComposedPath(
-      "Path to your input samplesheet CSV (reference with @, or Enter to skip):",
-    );
+    const input = await this.resolveComposedInput(result.dir);
 
     // Without an input, a composed pipeline that reads a samplesheet will fail —
     // don't launch a doomed run; offer the test profile instead.
@@ -827,6 +835,74 @@ export class Agent {
     }
     this.io.say("Run completed successfully.");
     await this.interpretComposedRun(session, resolved, opts.outdir);
+  }
+
+  /**
+   * Resolves the composed pipeline's `--input`: accepts a ready samplesheet CSV,
+   * or a sequence **file/folder** the scientist points at — in which case Hirsh
+   * builds the samplesheet (columns sample,fastq_1,fastq_2) for them, so they
+   * don't hand-write a CSV. Returns "" to skip. `@` paths supported.
+   */
+  private async resolveComposedInput(runDir: string): Promise<string> {
+    const raw = (
+      await this.io.ask(
+        "Your input — a samplesheet CSV, or a sequence file/folder I'll build one from " +
+          "(reference with @, or Enter to skip):",
+      )
+    ).trim();
+    const ans = classifyPathAnswer(raw);
+    if (ans.kind !== "path") return ""; // empty or non-path → skip
+    const p = resolve(ans.path);
+    if (!existsSync(p)) {
+      this.io.warn(`I couldn't find ${p}; skipping the input.`);
+      return "";
+    }
+    if (/\.csv$/i.test(p)) return p; // already a samplesheet
+
+    const rows = await this.composedRowsFromPath(p);
+    if (rows.length === 0) {
+      this.io.warn("I couldn't find sequence files there; skipping the input.");
+      return "";
+    }
+    const header = ["sample", "fastq_1", "fastq_2"];
+    const path = join(runDir, "samplesheet.csv");
+    try {
+      writeCsv(path, header, rows as unknown as Array<Record<string, string>>);
+    } catch (err) {
+      this.io.warn("Couldn't write the samplesheet: " + (err instanceof Error ? err.message : String(err)));
+      return "";
+    }
+    this.io.say("Built a samplesheet from your files:");
+    this.io.say(previewCsv(header, rows as unknown as Array<Record<string, string>>));
+    this.io.info(
+      "Note: a composed pipeline reads inputs generically — your file(s) are wired into its input " +
+        "channel; review the results with that in mind.",
+    );
+    this.io.info(`Samplesheet written to ${path}`);
+    return path;
+  }
+
+  /** Builds samplesheet rows from a sequence file or a folder of them. */
+  private async composedRowsFromPath(p: string): Promise<ComposedSheetRow[]> {
+    let isDir = false;
+    try {
+      isDir = statSync(p).isDirectory();
+    } catch {
+      return [];
+    }
+    if (!isDir) return composedRowsFromFiles([p]);
+
+    // A folder: prefer FASTQ pair inference; else recognize sequences by content.
+    const scan = scanFastqs(p);
+    if (scan.files.length > 0) {
+      return inferPairs(scan).map((pair) => ({
+        sample: pair.sample,
+        fastq_1: pair.fastq_1,
+        fastq_2: pair.fastq_2 ?? "",
+      }));
+    }
+    const sniffed = await scanSequenceDir(p);
+    return composedRowsFromFiles(sniffed.sequences.map((s) => s.file));
   }
 
   /** Asks for a path/value with `@` reference support; empty means skip. */

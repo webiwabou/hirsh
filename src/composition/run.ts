@@ -27,6 +27,28 @@ export interface ComposedRunOptions {
   test?: boolean;
 }
 
+/** A composed pipeline's samplesheet row (columns: sample,fastq_1,fastq_2). */
+export interface ComposedSheetRow {
+  sample: string;
+  fastq_1: string;
+  fastq_2: string;
+}
+
+/** A clean sample name from a file path (drops the extension and .gz). Pure. */
+export function sampleNameFromPath(path: string): string {
+  const base = (path.split("/").pop() ?? path).replace(/\.gz$/i, "").replace(/\.[^.]+$/, "");
+  return base.replace(/[^A-Za-z0-9_.-]/g, "_") || "sample";
+}
+
+/**
+ * Builds samplesheet rows (one per file) for a composed pipeline, pointing each
+ * file at `fastq_1` — the generic input column the composed reader expects, so a
+ * scientist can hand over a FASTA/FASTQ instead of writing a CSV by hand. Pure.
+ */
+export function composedRowsFromFiles(files: string[]): ComposedSheetRow[] {
+  return files.map((f) => ({ sample: sampleNameFromPath(f), fastq_1: f, fastq_2: "" }));
+}
+
 /** Builds the `nextflow run …` argument list for a composed pipeline. Pure. */
 export function buildComposedRunCommand(opts: ComposedRunOptions): string[] {
   const profile = opts.test ? `test,${opts.engine}` : opts.engine;
