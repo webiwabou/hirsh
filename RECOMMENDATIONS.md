@@ -70,10 +70,14 @@ parameterize → confirm → run → interpret.
     spaces) so the paste lands as one editable line to review and submit. Applied via
     a TTY-preserving Transform shared by readline and inquirer; opt out with
     `HIRSH_NO_PASTE_FILTER` (`cli/paste.ts::filterBracketedPaste`, unit-tested).
-  - ⬜ Remaining: apply the options prompt to the remaining selections (execution
-    backend/executor, LLM-proposed gap tools); live-color the `@` fragment as it's
-    typed and a fuller inline command/@ dropdown (today it's Tab-completion); reduce
-    redundant intent questions; and fuller free-form redirection everywhere.
+  - ✅ **Backend/executor selection uses the menu too.** Choosing the execution
+    backend (Docker/Singularity/Conda/Mamba) and the executor (local/Slurm/…/AWS
+    Batch) is now the same arrow-key recommended-options menu, not a numbered text
+    prompt (`chooseBackend`/`chooseExecutor` delegate to `chooseWith`).
+  - ⬜ Remaining: apply the menu to the LLM-proposed gap-tool prompts; live-color the
+    `@` fragment as it's typed and a fuller inline command/@ dropdown (today it's
+    Tab-completion); reduce redundant intent questions; and fuller free-form
+    redirection everywhere.
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
