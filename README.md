@@ -224,6 +224,9 @@ composed pipeline. (On a basic terminal it falls back to a numbered prompt.)
 
 Type **`/`** then **Tab** to complete a command (`/help`, `/status`, `/reset`,
 `/exit`), and **`@`** then **Tab** to complete a file path (e.g. `@./da`→`@./data/`).
+Pasting a multi-line block (e.g. a FASTA sequence) lands as one line to review
+rather than submitting line-by-line (set `HIRSH_NO_PASTE_FILTER` to disable). For
+sequence data, pointing at a file with `@path` is usually cleaner than pasting.
 
 ### Example session
 

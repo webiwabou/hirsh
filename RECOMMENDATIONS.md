@@ -64,13 +64,16 @@ parameterize → confirm → run → interpret.
     references Tab-complete against the filesystem** (`parseAtToken`, unit-tested).
   - ✅ **Arrow-key confirmations.** Yes/No prompts are an arrow menu too (select the
     pointer, no typing), with the natural-language text confirm as the fallback.
-  - ⬜ Remaining: **multi-line paste** — a pasted FASTA sequence (with newlines) is
-    submitted line-by-line by readline and gets truncated; capture bracketed-paste
-    so a pasted block is one input (workaround today: save to a file and use `@`).
-    Also: apply the options prompt to the remaining selections (execution backend/
-    executor, LLM-proposed gap tools); live-color the `@` fragment as it's typed and
-    a fuller inline command/@ dropdown (today it's Tab-completion); reduce redundant
-    intent questions; and fuller free-form redirection everywhere.
+  - ✅ **Multi-line paste (bracketed paste).** On a TTY, a pasted block (e.g. a FASTA
+    with newlines) no longer submits line-by-line and truncates: Hirsh enables
+    bracketed paste and filters it (markers stripped, in-paste newlines collapsed to
+    spaces) so the paste lands as one editable line to review and submit. Applied via
+    a TTY-preserving Transform shared by readline and inquirer; opt out with
+    `HIRSH_NO_PASTE_FILTER` (`cli/paste.ts::filterBracketedPaste`, unit-tested).
+  - ⬜ Remaining: apply the options prompt to the remaining selections (execution
+    backend/executor, LLM-proposed gap tools); live-color the `@` fragment as it's
+    typed and a fuller inline command/@ dropdown (today it's Tab-completion); reduce
+    redundant intent questions; and fuller free-form redirection everywhere.
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
