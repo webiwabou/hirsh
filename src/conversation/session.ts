@@ -18,7 +18,7 @@ export type Phase =
 export const PHASE_LABEL: Record<Phase, string> = {
   intent: "A · Understand the intent",
   select: "B · Pipeline selection",
-  compose: "F4 · Composing from nf-core modules",
+  compose: "B · Composing a pipeline from nf-core modules",
   params: "C · Parameterization",
   confirm: "D · Confirmation",
   execute: "D · Execution",

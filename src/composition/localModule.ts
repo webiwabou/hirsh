@@ -13,6 +13,7 @@
  */
 import { processName, type NfCoreModule } from "../modules/types.js";
 import type { AgentIO } from "../conversation/io.js";
+import { chooseWith } from "../conversation/choice.js";
 
 export interface LocalToolIO {
   /** Element/kind name — drives channel-type wiring, e.g. "bam", "reads", "vcf". */
@@ -207,31 +208,106 @@ function sanitizeName(name: string): string {
   return clean.length >= 2 ? clean : "customtool";
 }
 
+/** A clean lowercase token for an output kind / file pattern (never spaces). */
+function sanitizeKind(raw: string): string {
+  const t = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return t.length >= 1 && t.length <= 20 ? t : "";
+}
+
 /**
- * Interactively gathers a custom tool spec from the scientist. Kept small: name,
- * environment (container/conda), command, one primary input and one output.
+ * Interactively gathers a custom tool spec from the scientist, using recommended
+ * options with plain-language descriptions (not nf-core jargon) and sensible
+ * defaults — so someone who has never used Nextflow can still add their own tool.
  */
 export async function collectLocalTool(io: AgentIO): Promise<LocalToolSpec | null> {
-  const rawName = (await io.ask("Short name for your tool (lowercase, e.g. 'myfilter'):")).trim();
+  const rawName = (await io.ask("A short name for your tool (lowercase, e.g. 'peakfilter'):")).trim();
   if (!rawName) return null;
   const name = sanitizeName(rawName);
 
   const description =
-    (await io.ask("One-line description of what it does:")).trim() || `Custom tool ${name}.`;
+    (await io.ask("In one line, what does it do?")).trim() || `Custom tool ${name}.`;
 
-  const container = (await io.ask("Container image (e.g. biocontainers/…; blank if none):")).trim();
-  const conda = container
-    ? ""
-    : (await io.ask("Conda package (e.g. bioconda::samtools=1.19; blank if none):")).trim();
+  // Software environment — explained plainly; "set it later" is the safe default.
+  const envKind = await chooseWith(
+    io,
+    "How is your tool's software provided? (this is what makes the analysis reproducible — if you're unsure, that's fine)",
+    [
+      {
+        value: "later",
+        label: "I'm not sure — set it up later",
+        description: "leave it empty for now; add a container or conda package before a real run",
+        recommended: true,
+      },
+      {
+        value: "conda",
+        label: "A conda / bioconda package",
+        description: "your tool installs with conda (e.g. it's on bioconda)",
+      },
+      {
+        value: "container",
+        label: "A container image",
+        description: "a Docker/Singularity image (e.g. from biocontainers)",
+      },
+    ],
+  );
+  let container = "";
+  let conda = "";
+  if (envKind === "conda") {
+    conda = (await io.ask("conda package (e.g. bioconda::samtools=1.19):")).trim();
+  } else if (envKind === "container") {
+    container = (await io.ask("container image (e.g. biocontainers/samtools:1.19--h50ea8bc_0):")).trim();
+  } else if (envKind !== "later" && envKind !== "") {
+    // The scientist typed a package/image directly — route it by shape.
+    if (envKind.includes("::")) conda = envKind;
+    else if (envKind.includes("/") || envKind.includes(":")) container = envKind;
+  }
 
-  const inputKind = (await io.ask("What does it take as input? (e.g. bam, reads, vcf):")).trim() || "input";
+  const inputKind =
+    (await chooseWith(
+      io,
+      "What kind of data does your tool read in? (pick one, or type your own)",
+      [
+        { value: "fasta", label: "FASTA sequences", description: "protein or nucleotide sequences (.fasta/.fa)" },
+        { value: "fastq", label: "FASTQ reads", description: "raw sequencing reads (.fastq.gz)" },
+        { value: "bam", label: "BAM alignments", description: "aligned reads (.bam)" },
+        { value: "vcf", label: "VCF variants", description: "variant calls (.vcf)" },
+        { value: "tsv", label: "A table", description: "tabular data (.tsv/.csv)" },
+      ],
+      { customHint: "type the input kind (e.g. pdb)" },
+    )) || "input";
+
+  io.info(
+    "Your tool runs as a shell command. Use $prefix where the output name should go — I fill it in. " +
+      `Example: ${name}.py -i input.${inputKind} -o $prefix.out`,
+  );
   const command =
-    (await io.ask("Shell command to run (use $prefix for the output base, $args for extra args):")).trim() ||
-    `echo "TODO: run ${name}" > ${"${prefix}"}.out`;
-  const outKind = (await io.ask("What does it produce? (kind, e.g. bam, tsv):")).trim() || "output";
+    (await io.ask("Command to run (press Enter to drop in a placeholder you'll fill in later):")).trim() ||
+    `echo "TODO: run ${name} here" > ${"${prefix}"}.out`;
+
+  const outKindRaw = await chooseWith(
+    io,
+    "What does your tool produce? (pick one, or type your own)",
+    [
+      { value: "graph", label: "A graph / network", description: "e.g. a .graph/.gml/.json graph you can open in a viewer" },
+      { value: "html", label: "An interactive HTML report", description: "opens in a browser — nice for visualizing results" },
+      { value: "tsv", label: "A table", description: "tabular results (.tsv/.csv)" },
+      { value: "json", label: "A JSON file", description: "structured data (.json)" },
+      { value: "fasta", label: "FASTA sequences", description: "sequences (.fasta)" },
+    ],
+    { customHint: "type the output kind" },
+  );
+  const outKind = sanitizeKind(outKindRaw) || "output";
+
+  const defaultPattern = `*.${outKind}`;
   const pattern =
-    (await io.ask(`Output file pattern (e.g. *.${outKind}) [*.${outKind}]:`)).trim() || `*.${outKind}`;
-  const versionCommand = (await io.ask("Command that prints the tool version (blank to skip):")).trim();
+    (await io.ask(`Output file naming — press Enter for "${defaultPattern}", or give a pattern:`)).trim() ||
+    defaultPattern;
+
+  const versionCommand = (
+    await io.ask(
+      "Optional (advanced): a command that prints the tool's version, recorded for reproducibility. Press Enter to skip:",
+    )
+  ).trim();
 
   return {
     name,

@@ -500,7 +500,7 @@ export class Agent {
   /** Phase F4 — compose a new pipeline from live nf-core modules. */
   private async phaseCompose(session: Session): Promise<void> {
     session.phase = "compose";
-    this.io.heading("Phase F4 · Composing a pipeline from nf-core modules");
+    this.io.heading("Phase B · Composing a pipeline from nf-core modules");
     this.io.info(
       "I'll search the live nf-core/modules catalog, propose a chain of real modules, " +
         "and generate a pinned, nf-core-structured pipeline project for you to review.",
@@ -628,14 +628,15 @@ export class Agent {
    * composition so it wires in like any nf-core module.
    */
   private async addLocalTools(resolved: ResolvedComposition): Promise<void> {
-    let add = await this.io.confirm(
-      "Add a custom (non-nf-core) tool of your own as a local module?",
-      false,
+    this.io.info(
+      "You can also add one of your own tools or scripts as a pipeline step (e.g. a Python " +
+        "script). I'll wrap it into the pipeline for you — skip this if the steps above are enough.",
     );
+    let add = await this.io.confirm("Add one of your own tools/scripts as a step?", false);
     while (add) {
       const spec = await collectLocalTool(this.io);
       if (spec) this.addLocalToolToPlan(resolved, spec);
-      add = await this.io.confirm("Add another custom tool?", false);
+      add = await this.io.confirm("Add another of your own tools?", false);
     }
   }
 
