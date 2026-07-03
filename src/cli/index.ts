@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   try {
     for (;;) {
       session = createSession();
-      const agent = new Agent(provider, config, registry, agentIo);
+      const agent = new Agent(provider, config, registry, agentIo, sourcePath ?? undefined);
       try {
         await agent.run(session);
         const again = await io.confirm("\nStart another analysis?", false);

@@ -6,9 +6,11 @@
  * at each step (queried by /status).
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
+import { persistExecutionChoice, type ExecutionUpdates } from "../config/writeConfig.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineCitation, PipelineDefinition } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
@@ -147,12 +149,15 @@ export function coerceLike(
 export class Agent {
   private memory: MemoryData | null = null;
   private consentChecked = false;
+  private envPersistDone = false;
 
   constructor(
     private readonly provider: LLMProvider,
     private readonly config: HirshConfig,
     private readonly registry: PipelineDefinition[],
     private readonly io: AgentIO,
+    /** Path of the loaded config file, for persisting the env choice back. */
+    private readonly configPath?: string,
   ) {}
 
   async run(session: Session): Promise<void> {
@@ -1596,6 +1601,45 @@ export class Agent {
   }
 
   /**
+   * Phase 6 — persist the env choice. When the chosen backend/executor differs
+   * from config, offer (once per session) to save it as the default, editing the
+   * config file in place with comments preserved. Opt-in (default no).
+   */
+  private async offerPersistEnv(session: Session): Promise<void> {
+    if (this.envPersistDone) return;
+    const engine = session.engine;
+    const executor = session.executor?.executor ?? "local";
+    const queue = session.executor?.queue;
+    const cfg = this.config.execution;
+    const engineDiff = !!engine && engine !== cfg.containerEngine;
+    const execDiff = executor !== (cfg.executor ?? "local") || (queue ?? "") !== (cfg.queue ?? "");
+    if (!engineDiff && !execDiff) return;
+
+    const target = this.configPath ?? join(homedir(), ".bioagent", "config.yaml");
+    const save = await this.io.confirm(
+      `Save this as your default (${engine ?? cfg.containerEngine} · ${describeExecutor(session.executor ?? { executor: "local" })}) in ${target}?`,
+      false,
+    );
+    this.envPersistDone = true; // ask at most once per session
+    if (!save) return;
+
+    const updates: ExecutionUpdates = {};
+    if (engine) updates.containerEngine = engine;
+    updates.executor = executor;
+    if (queue) updates.queue = queue;
+    try {
+      persistExecutionChoice(target, updates);
+      // Reflect in the in-memory config so it isn't re-offered next conversation.
+      if (engine) cfg.containerEngine = engine;
+      cfg.executor = executor;
+      if (queue) cfg.queue = queue;
+      this.io.info(`Saved as your default in ${target}.`);
+    } catch (err) {
+      this.io.warn("Couldn't write the config: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  /**
    * Phase 3 — container & data staging. Points image/env downloads at a stable
    * cache (so they're reused), estimates the run's disk footprint (images +
    * inputs + intermediate work) and warns about disk pressure before running.
@@ -1678,6 +1722,7 @@ export class Agent {
     await this.phaseEnvironment(session);
     await this.phaseExecutor(session, runDir);
     finalizeCommand(session, pipeline, this.config);
+    await this.offerPersistEnv(session);
 
     const proceed = await this.phaseResourceCheck(session, pipeline);
     if (!proceed) return false;
