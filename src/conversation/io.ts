@@ -5,6 +5,18 @@
  * conversational logic.
  */
 
+/** One selectable option for `select` / the recommended-options prompt. */
+export interface ChoiceOption {
+  /** The value returned when this option is picked. */
+  value: string;
+  /** Short label shown to the user. */
+  label: string;
+  /** Plain-language description / trade-off (optional). */
+  description?: string;
+  /** Marks the recommended option — shown tagged and used as the default. */
+  recommended?: boolean;
+}
+
 export interface AgentIO {
   /** Agent message (normal text, with a trailing newline). */
   say(text: string): void;
@@ -38,6 +50,16 @@ export interface AgentIO {
     question: string,
     defaultYes?: boolean,
   ): Promise<{ decision: boolean } | { text: string }>;
+  /**
+   * Optional interactive single-select (arrow keys in a rich terminal). Returns
+   * the chosen option's value, or a free-text custom answer. Frontends that don't
+   * implement it fall back to a numbered `ask` prompt (see `chooseWith`).
+   */
+  select?(
+    question: string,
+    options: ChoiceOption[],
+    opts?: { allowCustom?: boolean; customLabel?: string },
+  ): Promise<string>;
   /** Writes a chunk without a newline (for streaming LLM tokens). */
   raw(chunk: string): void;
   /** Closes the current streaming line with a newline. */

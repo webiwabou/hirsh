@@ -11,7 +11,8 @@
  * This keeps the invariant that nothing consequential happens without explicit
  * human consent, even when running autonomously.
  */
-import type { AgentIO } from "../conversation/io.js";
+import type { AgentIO, ChoiceOption } from "../conversation/io.js";
+import { defaultOption } from "../conversation/choice.js";
 
 export class AutonomousIO implements AgentIO {
   constructor(private readonly base: AgentIO) {}
@@ -41,6 +42,17 @@ export class AutonomousIO implements AgentIO {
   /** Open questions still need a human — autonomy reduces friction, not input. */
   ask(question: string): Promise<string> {
     return this.base.ask(question);
+  }
+
+  /** A recommended-options choice has a default, so autonomy takes it. */
+  async select(
+    question: string,
+    options: ChoiceOption[],
+    _opts?: { allowCustom?: boolean; customLabel?: string },
+  ): Promise<string> {
+    const value = defaultOption(options)?.value ?? "";
+    this.base.info(`[auto] ${question} → ${value || "(default)"}`);
+    return value;
   }
 
   async confirm(

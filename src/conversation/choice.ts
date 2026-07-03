@@ -7,18 +7,9 @@
  * built on top of the existing `ask`, so it needs no new AgentIO method and works
  * with every frontend.
  */
-import type { AgentIO } from "./io.js";
+import type { AgentIO, ChoiceOption } from "./io.js";
 
-export interface ChoiceOption {
-  /** The value returned when this option is picked. */
-  value: string;
-  /** Short label shown to the user. */
-  label: string;
-  /** Plain-language description / trade-off (optional). */
-  description?: string;
-  /** Marks the recommended option — shown tagged and used as the Enter default. */
-  recommended?: boolean;
-}
+export type { ChoiceOption };
 
 /** The option to default to on empty input: the recommended one, else the first. */
 export function defaultOption(options: ChoiceOption[]): ChoiceOption | undefined {
@@ -59,6 +50,10 @@ export async function chooseWith(
   options: ChoiceOption[],
   opts: { customHint?: string } = {},
 ): Promise<string> {
+  // Rich terminal: arrow-key selection. Otherwise a numbered text prompt.
+  if (io.select) {
+    return io.select(question, options, { allowCustom: true, customLabel: opts.customHint });
+  }
   io.say(question);
   options.forEach((o, i) => {
     io.say(`  ${i + 1}) ${o.label}${o.recommended ? " (recommended)" : ""}`);

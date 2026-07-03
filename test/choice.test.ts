@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defaultOption, resolveChoice, type ChoiceOption } from "../src/conversation/choice.js";
+import { chooseWith, defaultOption, resolveChoice, type ChoiceOption } from "../src/conversation/choice.js";
+import type { AgentIO } from "../src/conversation/io.js";
 
 const options: ChoiceOption[] = [
   { value: "later", label: "I'm not sure — set it up later", recommended: true },
@@ -39,5 +40,36 @@ describe("resolveChoice", () => {
     expect(resolveChoice("bioconda::mmseqs2=15", options)).toBe("bioconda::mmseqs2=15");
     expect(resolveChoice("9", options)).toBe("9"); // out of range → custom
     expect(resolveChoice("2 things", options)).toBe("2 things"); // not a bare number
+  });
+});
+
+describe("chooseWith", () => {
+  it("delegates to io.select when the frontend supports it", async () => {
+    const calls: unknown[] = [];
+    const io = {
+      say() {},
+      info() {},
+      async ask() {
+        throw new Error("ask should not be called when select exists");
+      },
+      async select(_q: string, _o: ChoiceOption[], opts?: unknown) {
+        calls.push(opts);
+        return "conda";
+      },
+    } as unknown as AgentIO;
+    const result = await chooseWith(io, "How is it provided?", options, { customHint: "type a package" });
+    expect(result).toBe("conda");
+    expect(calls[0]).toEqual({ allowCustom: true, customLabel: "type a package" });
+  });
+
+  it("falls back to a numbered ask prompt when select is absent", async () => {
+    const io = {
+      say() {},
+      info() {},
+      async ask() {
+        return "2"; // pick option index 2 → "conda"
+      },
+    } as unknown as AgentIO;
+    expect(await chooseWith(io, "q", options)).toBe("conda");
   });
 });

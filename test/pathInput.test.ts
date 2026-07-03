@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPathAnswer,
   looksLikePath,
+  parseAtToken,
   pathReference,
   wantsTestProfile,
 } from "../src/conversation/pathInput.js";
@@ -46,6 +47,20 @@ describe("pathReference", () => {
     expect(pathReference("@/data/x")).toBe("/data/x");
     expect(pathReference("/data/x")).toBe("/data/x");
     expect(pathReference("  @./y  ")).toBe("./y");
+  });
+});
+
+describe("parseAtToken", () => {
+  it("splits a trailing @path token into dir + base", () => {
+    expect(parseAtToken("@./da")).toEqual({ token: "@./da", dir: "./", base: "da" });
+    expect(parseAtToken("@reads")).toEqual({ token: "@reads", dir: "", base: "reads" });
+    expect(parseAtToken("@/data/sub/fi")).toEqual({ token: "@/data/sub/fi", dir: "/data/sub/", base: "fi" });
+  });
+
+  it("only matches a token at the end of the line, else null", () => {
+    expect(parseAtToken("use @data here")).toBeNull();
+    expect(parseAtToken("plain text")).toBeNull();
+    expect(parseAtToken("run on @/data")).toEqual({ token: "@/data", dir: "/", base: "data" });
   });
 });
 

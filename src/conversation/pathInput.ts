@@ -49,3 +49,18 @@ const TEST_PROFILE_RE =
 export function wantsTestProfile(text: string): boolean {
   return TEST_PROFILE_RE.test(text);
 }
+
+/**
+ * Parses a trailing `@path` token from an input line (for Tab-completion),
+ * splitting it into the directory prefix and the basename being typed. Returns
+ * null when the line doesn't end in an `@…` token. Pure.
+ */
+export function parseAtToken(line: string): { token: string; dir: string; base: string } | null {
+  const m = /(?:^|\s)(@[^\s]*)$/.exec(line);
+  if (!m) return null;
+  const frag = m[1].slice(1); // drop the leading "@"
+  const slash = frag.lastIndexOf("/");
+  const dir = slash >= 0 ? frag.slice(0, slash + 1) : "";
+  const base = slash >= 0 ? frag.slice(slash + 1) : frag;
+  return { token: m[1], dir, base };
+}
