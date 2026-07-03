@@ -13,7 +13,7 @@
  * samplesheetPath and command.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, HirshConfig } from "../config/types.js";
 import type { PipelineDefinition, PipelineParam } from "../pipelines/types.js";
@@ -22,11 +22,14 @@ import type { Session } from "./session.js";
 import {
   checkSomaticDesign,
   inferPairs,
+  linkCanonicalSequences,
   previewCsv,
   scanFastqs,
+  scanSequenceDir,
   validateSamplesheetContent,
   writeCsv,
   type FastqPair,
+  type ScanResult,
 } from "../execution/samplesheet.js";
 
 /**
@@ -208,9 +211,10 @@ async function buildSamplesheet(
     }
     for (const f of entries) rows.push({ sample: baseName(f), fasta: f });
   } else {
-    const dir = await io.ask("Directory with the FASTQ files (.fastq.gz / .fq.gz):");
-    const scan = scanFastqs(dir);
-    if (scan.files.length === 0) io.warn("I found no FASTQ files in that directory.");
+    const dir = await io.ask(
+      "Directory with the FASTQ files (.fastq.gz / .fq.gz, or any folder of sequence files):",
+    );
+    const scan = await resolveFastqScan(io, dir, runDir);
     const pairs = inferPairs(scan);
     if (isSarek) {
       rows.push(...(await buildSarekRows(io, pairs)));
@@ -232,6 +236,51 @@ async function buildSamplesheet(
   session.samplesheetPath = path;
   session.paramValues.input = path;
   io.info(`Samplesheet written to ${path}`);
+}
+
+/**
+ * Resolves a directory to a FASTQ scan. Prefers the fast extension-based scan;
+ * when it finds nothing, falls back to **content-based** recognition (sniffing
+ * FASTQ by its bytes, not its name) so sequences in a `.txt` or oddly-named file
+ * are still usable — offering to symlink them to canonical names. Recognized-but-
+ * unsupported formats (BAM/CRAM/fast5…) are reported, not silently ignored.
+ */
+async function resolveFastqScan(io: AgentIO, dir: string, runDir: string): Promise<ScanResult> {
+  const scan = scanFastqs(dir);
+  if (scan.files.length > 0) return scan;
+
+  const sniffed = await scanSequenceDir(dir);
+  const fastqs = sniffed.sequences.filter((s) => s.format === "fastq");
+  if (fastqs.length === 0) {
+    io.warn("I found no FASTQ files in that directory (by extension or by content).");
+    for (const u of sniffed.unsupported) io.warn(`  • ${basename(u.file)}: looks like ${u.reason}.`);
+    if (sniffed.unsupported.length > 0) {
+      io.info(
+        "I can read plain or gzipped FASTQ/FASTA. Convert aligned/binary formats (BAM/CRAM/SRA/" +
+          "fast5) to FASTQ first — e.g. `samtools fastq input.bam`.",
+      );
+    }
+    return scan; // empty
+  }
+
+  io.info(
+    `No .fastq/.fq extension there, but I recognized ${fastqs.length} FASTQ file(s) by their content.`,
+  );
+  for (const u of sniffed.unsupported) io.warn(`  • skipping ${basename(u.file)} (looks like ${u.reason}).`);
+  const link = await io.confirm(
+    "Create canonical .fastq(.gz) names (symlinks) so the pipeline reads them?",
+    true,
+  );
+  if (!link) {
+    io.info("Okay — leaving them as-is; point me at a folder of properly named FASTQ files to continue.");
+    return { dir: resolve(dir), files: [] };
+  }
+
+  const linkDir = join(runDir, "inputs");
+  const res = linkCanonicalSequences(fastqs, linkDir);
+  for (const f of res.failed) io.warn(`  couldn't link ${basename(f)} (symlink failed).`);
+  io.info(`Linked ${res.linked.length} file(s) into ${linkDir} with canonical names.`);
+  return scanFastqs(linkDir);
 }
 
 /** Lets the user point at an existing CSV; validates it against the column spec. */
