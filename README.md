@@ -308,9 +308,14 @@ backend/executor you already chose. It always asks first and never auto-chains; 
 an expected output or a required input is missing, it degrades gracefully and
 leaves everything prepared for you.
 
-> **Limitation.** Today Hirsh points you at the follow-up's report/tables rather
-> than interpreting them biologically the way it does the primary run, and the
-> follow-up run skips the resource pre-flight. See
+Once the follow-up finishes, Hirsh **interprets its results biologically**, just
+like a primary run: it parses the per-contrast differential-expression tables into
+concrete numbers — how many genes are significant and the up/down split (padj<0.05,
+|log2FC|>1 by default) — and explains what they mean for your objective, revisiting
+any design caveats flagged before the run and pointing you at the HTML report.
+
+> **Limitation.** The follow-up run skips the resource pre-flight and isn't yet
+> recorded in project memory or turned into a methods paragraph. See
 > [RECOMMENDATIONS.md](RECOMMENDATIONS.md), Phase 2.
 
 ## Resource awareness

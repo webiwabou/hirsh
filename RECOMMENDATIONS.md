@@ -131,10 +131,16 @@ Make every supported pipeline safe to run for real and make its output land as
   infer (the sample-condition table and the contrasts), and launches it through
   the usual confirmed path, reusing the chosen backend/executor. Always confirmed,
   never a silent auto-chain (`execution/followUp.ts` pure builders unit-tested;
-  `phaseFollowUp` wired).
-  - ⬜ Remaining: automated biological interpretation of the follow-up's results
-    (today it points at the report/tables), a resource pre-flight for the
-    follow-up run, and recording it in project memory.
+  `phaseFollowUp` wired). Its results are then **interpreted biologically like a
+  primary run**: a runnable follow-up declares its key outputs, and Hirsh parses
+  the per-contrast differential tables into concrete numbers — how many genes are
+  significant and the up/down split (recognizing DESeq2/limma/edgeR column names;
+  padj<0.05, |log2FC|>1 by default) — then asks the LLM for a plain-language
+  summary in the context of the objective, revisiting the same pre-run design
+  caveats and surfacing the HTML report (`results/parsers.ts::countDifferential`
+  and the `de_table_dir` output kind, unit-tested).
+  - ⬜ Remaining: a resource pre-flight for the follow-up run, recording it in
+    project memory, and a paste-ready methods paragraph for the follow-up.
 
 ## Phase 3 — Environment & infrastructure autonomy ✅ (shipped; Docker install stays guided)
 

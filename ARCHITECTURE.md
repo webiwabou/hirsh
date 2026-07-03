@@ -162,6 +162,10 @@ No other module depends on the concrete provider.
   sample-condition table and contrasts — then runs it through the normal
   confirmed-execution path, reusing the chosen backend/executor. rnaseq points at
   nf-core/differentialabundance. It suggests-then-offers; it never auto-chains.
+  The follow-up's results are interpreted like a primary run: `results/interpreter.ts`
+  takes an `InterpretablePipeline` (a full `PipelineDefinition` satisfies it), and a
+  `de_table_dir` output is parsed by `parsers.ts::countDifferential` into per-contrast
+  significant-gene counts (up/down) that ground the same LLM biological summary.
 - **Public-data retrieval (Phase 6).** `execution/fetchngs.ts` detects accession
   ids in the request (SRA/ENA/DDBJ, GEO, BioProject/BioSample, ArrayExpress) with
   anchored regexes and builds a pinned `nf-core/fetchngs` run (all pure/testable).
