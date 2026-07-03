@@ -37,7 +37,7 @@ export interface ResultOutput {
   path: string;
   description: string;
   /** Type for the Phase E results interpreter. */
-  kind: "multiqc_html" | "table" | "vcf_dir" | "directory";
+  kind: "multiqc_html" | "table" | "vcf_dir" | "de_table_dir" | "directory";
 }
 
 export interface PipelineDefinition {
@@ -133,4 +133,8 @@ export interface FollowUpSpec {
   carryParams?: string[];
   /** Extra inputs Hirsh must ask the user for (paths/values). */
   requiredInputs?: FollowUpInput[];
+  /** Short title for the follow-up, used when interpreting its results. */
+  title?: string;
+  /** Key outputs of the follow-up, so its results are interpreted like a primary run. */
+  outputs?: ResultOutput[];
 }

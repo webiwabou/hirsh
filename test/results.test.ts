@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { countVcfRecords, parseGeneralStats, summarizeTable } from "../src/results/parsers.js";
+import {
+  countDifferential,
+  countVcfRecords,
+  parseGeneralStats,
+  summarizeTable,
+} from "../src/results/parsers.js";
 
 describe("summarizeTable", () => {
   const tsv = [
@@ -36,6 +41,51 @@ describe("parseGeneralStats", () => {
     expect(g.sampleCount).toBe(2);
     expect(g.metrics).toEqual(["percent_gc", "percent_dups"]);
     expect(g.perSample[0]).toEqual({ sample: "s1", values: { percent_gc: "45", percent_dups: "12" } });
+  });
+});
+
+describe("countDifferential", () => {
+  // DESeq2-style table: padj + log2FoldChange, with an NA (untested) row.
+  const tsv = [
+    "gene_id\tlog2FoldChange\tpvalue\tpadj",
+    "G1\t2.5\t0.001\t0.01", // sig, up
+    "G2\t-3.0\t0.002\t0.02", // sig, down
+    "G3\t0.5\t0.2\t0.30", // not sig (padj high)
+    "G4\t4.0\t0.04\t0.049", // sig, up (padj just under 0.05, |lfc|>1)
+    "G5\t0.2\t0.001\t0.01", // padj sig but |lfc|<=1 → excluded
+    "G6\t5.0\tNA\tNA", // untested
+  ].join("\n");
+
+  it("counts significant genes with padj + log2FC thresholds and up/down split", () => {
+    const d = countDifferential(tsv);
+    expect(d.padjColumn).toBe("padj");
+    expect(d.lfcColumn).toBe("log2FoldChange");
+    expect(d.total).toBe(6);
+    expect(d.tested).toBe(5); // G6 has NA padj
+    expect(d.significant).toBe(3); // G1, G2, G4 (G3 padj high, G5 low fold-change)
+    expect(d.up).toBe(2); // G1, G4
+    expect(d.down).toBe(1); // G2
+  });
+
+  it("recognizes alternative column names (FDR/logFC) in CSV", () => {
+    const csv = ["id,logFC,FDR", "A,2,0.001", "B,0.1,0.001", "C,-3,0.2"].join("\n");
+    const d = countDifferential(csv);
+    expect(d.padjColumn).toBe("FDR");
+    expect(d.lfcColumn).toBe("logFC");
+    expect(d.significant).toBe(1); // only A (B fold-change too small, C not significant)
+    expect(d.up).toBe(1);
+  });
+
+  it("respects custom thresholds", () => {
+    const d = countDifferential(tsv, { alpha: 0.05, lfcThreshold: 0 });
+    expect(d.significant).toBe(4); // now G5 (|lfc|>0) also counts
+  });
+
+  it("returns padjColumn null when it can't identify the p-value column", () => {
+    const d = countDifferential("gene\tvalue\nA\t1\nB\t2");
+    expect(d.padjColumn).toBeNull();
+    expect(d.total).toBe(2);
+    expect(d.significant).toBe(0);
   });
 });
 

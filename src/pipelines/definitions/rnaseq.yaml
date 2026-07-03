@@ -127,6 +127,14 @@ followUp:
       description: "samplesheet CSV with a 'sample' column and your condition/covariate columns (defines the comparison groups)"
     - name: contrasts
       description: "contrasts CSV (columns id,variable,reference,target) naming the comparison(s) to test"
+  title: differential expression (DESeq2)
+  outputs:
+    - path: tables/differential
+      description: per-contrast differential expression tables
+      kind: de_table_dir
+    - path: report
+      description: differential abundance HTML report
+      kind: directory
 
 results:
   outdirParam: outdir

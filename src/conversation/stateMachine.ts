@@ -73,7 +73,7 @@ import {
 } from "../execution/resources.js";
 import { buildManifest, writeProvenance } from "../execution/provenance.js";
 import type { EnvReport } from "../execution/envCheck.js";
-import { gatherResults, summarizeResults } from "../results/interpreter.js";
+import { findHtmlReports, gatherResults, summarizeResults } from "../results/interpreter.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
@@ -1653,11 +1653,58 @@ export class Agent {
       return;
     }
     this.io.say(`${fu.pipeline} completed successfully.`);
+    await this.interpretFollowUp(session, fu, outdir);
     this.io.info(`Results: ${outdir}`);
-    this.io.info(
-      "Open its report/tables there for the differential-abundance results. " +
-        "(Full biological interpretation of a follow-up isn't automated yet.)",
+  }
+
+  /**
+   * Interprets a follow-up's results like a primary run: gathers its declared
+   * outputs (e.g. per-contrast DE tables → significant-gene counts) and asks the
+   * LLM for a biological summary in the context of the objective, revisiting the
+   * same pre-run design caveats. Degrades to a plain pointer if it has no declared
+   * outputs or none were produced.
+   */
+  private async interpretFollowUp(
+    session: Session,
+    fu: NonNullable<PipelineDefinition["followUp"]>,
+    outdir: string,
+  ): Promise<void> {
+    const outputs = fu.outputs ?? [];
+    if (outputs.length === 0) return;
+
+    const interpretable = {
+      name: fu.pipeline,
+      title: fu.title ?? "follow-up analysis",
+      results: { outputs },
+    };
+    const report = gatherResults(interpretable, outdir);
+    // Surface the follow-up's own HTML report(s) too.
+    for (const html of findHtmlReports(outdir)) {
+      if (!report.htmlReports.includes(html)) report.htmlReports.push(html);
+    }
+    if (!report.outputs.some((o) => o.found)) {
+      this.io.info(`Its outputs weren't where I expected under ${outdir}; open the folder to review them.`);
+      return;
+    }
+
+    const designNotes = (session.designReview?.observations ?? [])
+      .filter((o) => o.severity !== "info")
+      .map((o) => `[${o.topic}] ${o.message}`);
+
+    this.io.say("\nFollow-up results summary:\n");
+    await summarizeResults(
+      this.provider,
+      interpretable,
+      session.query,
+      report,
+      (chunk) => this.io.raw(chunk),
+      designNotes,
     );
+    this.io.endStream();
+    if (report.htmlReports.length > 0) {
+      this.io.info("HTML reports (open them in your browser):");
+      for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
   }
 
   /**

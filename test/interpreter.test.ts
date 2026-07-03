@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { summarizeResults, type ResultsReport } from "../src/results/interpreter.js";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  findHtmlReports,
+  gatherResults,
+  summarizeResults,
+  type InterpretablePipeline,
+  type ResultsReport,
+} from "../src/results/interpreter.js";
 import type { ChatOptions, ChatResponse, LLMProvider } from "../src/llm/provider.js";
 import type { PipelineDefinition } from "../src/pipelines/types.js";
 
@@ -54,5 +63,44 @@ describe("summarizeResults prompt", () => {
     const p = new CapturingProvider();
     await summarizeResults(p, pipeline, query, report, () => {}, []);
     expect(p.userContent()).toContain("No design caveats were flagged");
+  });
+});
+
+describe("gatherResults — differential-abundance follow-up", () => {
+  let outdir: string;
+  const followUp: InterpretablePipeline = {
+    name: "nf-core/differentialabundance",
+    title: "differential expression (DESeq2)",
+    results: {
+      outputs: [
+        { path: "tables/differential", description: "per-contrast DE tables", kind: "de_table_dir" },
+        { path: "report", description: "HTML report", kind: "directory" },
+      ],
+    },
+  };
+
+  beforeAll(() => {
+    outdir = mkdtempSync(join(tmpdir(), "hirsh-de-"));
+    mkdirSync(join(outdir, "tables", "differential"), { recursive: true });
+    mkdirSync(join(outdir, "report"), { recursive: true });
+    writeFileSync(
+      join(outdir, "tables", "differential", "treated_vs_control.deseq2.results.tsv"),
+      ["gene_id\tlog2FoldChange\tpadj", "G1\t2\t0.01", "G2\t-3\t0.02", "G3\t0.1\t0.9"].join("\n"),
+    );
+    writeFileSync(join(outdir, "report", "study.html"), "<html></html>");
+  });
+  afterAll(() => rmSync(outdir, { recursive: true, force: true }));
+
+  it("counts significant genes per contrast in the DE tables directory", () => {
+    const r = gatherResults(followUp, outdir);
+    const de = r.outputs.find((o) => o.output.kind === "de_table_dir")!;
+    expect(de.found).toBe(true);
+    expect(de.detail).toContain("1 contrast(s)");
+    expect(de.detail).toContain("2 significant gene(s) total"); // G1, G2
+    expect(de.detail).toContain("1 up, 1 down");
+  });
+
+  it("finds the follow-up's HTML report", () => {
+    expect(findHtmlReports(outdir)).toEqual([join(outdir, "report", "study.html")]);
   });
 });

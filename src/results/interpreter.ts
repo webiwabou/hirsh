@@ -11,9 +11,20 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import type { LLMProvider, ChatMessage } from "../llm/index.js";
-import type { PipelineDefinition, ResultOutput } from "../pipelines/types.js";
+import type { ResultOutput } from "../pipelines/types.js";
 import type { QueryContext } from "../conversation/session.js";
-import { countVcfRecords, parseGeneralStats, summarizeTable } from "./parsers.js";
+import { countDifferential, countVcfRecords, parseGeneralStats, summarizeTable } from "./parsers.js";
+
+/**
+ * The minimal shape the interpreter needs. A full PipelineDefinition satisfies
+ * it, and so does a synthesized follow-up (e.g. differentialabundance), so a
+ * chained analysis is interpreted the same way as a primary run.
+ */
+export interface InterpretablePipeline {
+  name: string;
+  title: string;
+  results: { outputs: ResultOutput[] };
+}
 
 export interface GatheredOutput {
   output: ResultOutput;
@@ -101,7 +112,8 @@ function describeMultiqc(htmlPath: string): string {
   ].join("\n  ");
 }
 
-function walkVcfs(root: string, cap = 40, maxDepth = 5): string[] {
+/** Depth-bounded recursive file search matching a name predicate. */
+function walkFiles(root: string, test: (name: string) => boolean, cap = 40, maxDepth = 5): string[] {
   const out: string[] = [];
   const stack: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
   while (stack.length > 0 && out.length < cap) {
@@ -122,12 +134,54 @@ function walkVcfs(root: string, cap = 40, maxDepth = 5): string[] {
       }
       if (isDir) {
         if (depth < maxDepth) stack.push({ dir: full, depth: depth + 1 });
-      } else if (/\.vcf(\.gz)?$/i.test(e) && out.length < cap) {
+      } else if (test(e) && out.length < cap) {
         out.push(full);
       }
     }
   }
   return out.sort();
+}
+
+function walkVcfs(root: string, cap = 40, maxDepth = 5): string[] {
+  return walkFiles(root, (e) => /\.vcf(\.gz)?$/i.test(e), cap, maxDepth);
+}
+
+/** HTML reports anywhere under a directory (e.g. a follow-up's report/ folder). */
+export function findHtmlReports(root: string, cap = 5): string[] {
+  return walkFiles(root, (e) => /\.html?$/i.test(e), cap, 4);
+}
+
+/**
+ * Describes a directory of per-contrast differential-expression tables with
+ * concrete numbers: how many genes were significant (and up/down) per contrast.
+ * Falls back to a plain directory listing when no differential tables are found.
+ */
+function describeDiffDir(path: string): string {
+  const files = walkFiles(path, (e) => /\.(tsv|csv|txt)(\.gz)?$/i.test(e), 60, 4);
+  const lines: string[] = [];
+  let contrasts = 0;
+  let totalSig = 0;
+  for (const file of files) {
+    const text = readTextMaybeGzip(file);
+    if (text === null) continue;
+    const d = countDifferential(text);
+    if (!d.padjColumn) continue; // not a differential table
+    contrasts++;
+    totalSig += d.significant;
+    const thresh = `padj<${d.alpha}${d.lfcColumn ? `, |log2FC|>${d.lfcThreshold}` : ""}`;
+    lines.push(
+      `${basename(file)}: ${fmt(d.significant)} of ${fmt(d.tested)} tested genes significant (${thresh})` +
+        (d.lfcColumn ? ` — ${fmt(d.up)} up, ${fmt(d.down)} down` : ""),
+    );
+  }
+  if (contrasts === 0) return describeDirectory(path);
+  return [
+    `${contrasts} contrast(s), ${fmt(totalSig)} significant gene(s) total.`,
+    ...lines.slice(0, 8).map((l) => "    " + l),
+    lines.length > 8 ? "    …" : "",
+  ]
+    .filter(Boolean)
+    .join("\n  ");
 }
 
 function describeVcfDir(path: string): string {
@@ -177,7 +231,7 @@ function safeIsDir(path: string): boolean {
 }
 
 /** Walks the declared outputs and collects concrete facts about what exists. */
-export function gatherResults(pipeline: PipelineDefinition, outdir: string): ResultsReport {
+export function gatherResults(pipeline: InterpretablePipeline, outdir: string): ResultsReport {
   const absOut = resolve(outdir);
   const outputs: GatheredOutput[] = [];
   const htmlReports: string[] = [];
@@ -194,6 +248,8 @@ export function gatherResults(pipeline: PipelineDefinition, outdir: string): Res
         detail = describeTable(absPath);
       } else if (out.kind === "vcf_dir") {
         detail = describeVcfDir(absPath);
+      } else if (out.kind === "de_table_dir") {
+        detail = describeDiffDir(absPath);
       } else if (safeIsDir(absPath)) {
         detail = describeDirectory(absPath);
       } else {
@@ -209,7 +265,7 @@ export function gatherResults(pipeline: PipelineDefinition, outdir: string): Res
 /** Generates the plain-language results summary using the LLM. */
 export async function summarizeResults(
   provider: LLMProvider,
-  pipeline: PipelineDefinition,
+  pipeline: InterpretablePipeline,
   query: QueryContext,
   report: ResultsReport,
   onToken: (chunk: string) => void,
