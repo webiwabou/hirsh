@@ -20,7 +20,7 @@ src/
 │   ├── banner.ts     minimal one-line logo, rounded welcome frame and tips
 │   ├── terminalIO.ts AgentIO implementation over readline + chalk
 │   └── autonomousIO.ts  IO decorator for autonomous mode (auto-answers reversible confirms) (Phase 6)
-├── config/           config loading and validation (YAML), API key from env var
+├── config/           config loading/validation (YAML), API key from env var, and comment-preserving write-back (writeConfig.ts)
 ├── llm/              LLM provider abstraction
 │   ├── provider.ts   LLMProvider interface + types (messages, tools, responses)
 │   ├── ollama.ts     Ollama adapter (HTTP /api/chat, streaming + tool calling)

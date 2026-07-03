@@ -274,8 +274,8 @@ negotiation and container/data staging are in; full toolchain bootstrapping
   default if available), and lets the scientist confirm or switch in a short Q&A;
   the choice sets the matching nf-core profile and is recorded in provenance
   (`execution/environment.ts`, unit-tested). Conda/Mamba are now supported backends.
-  - ⬜ Remaining: persist the choice back to config, and gate on Docker daemon
-    reachability (not just the CLI being present).
+  The choice can be **saved back to config** as the default (see Phase 6).
+  - ⬜ Remaining: gate on Docker daemon reachability (not just the CLI being present).
 
 ## Phase 4 — Composing pipelines from nf-core building blocks ✅ (runnable; refinements remain)
 
@@ -462,7 +462,12 @@ The full realization: a scientific collaborator, not a command builder.
     local and never uploaded), persists the answer (`consent` in the store), and
     never asks again; declining gates off all memory reads/writes
     (`ensureMemoryConsent`/`memoryEnabled`, unit-tested).
-  - ⬜ Remaining: persist the backend/executor choice back to the config file.
+  - ✅ **Persist the env choice to config.** When the chosen backend/executor
+    differs from config, Hirsh offers (once per session, opt-in) to save it as the
+    default, editing the config file in place with the YAML Document API so
+    **comments and the rest of the file are preserved** (creating a clean block map
+    if there's no file yet). Works even when memory is off
+    (`config/writeConfig.ts::updateExecutionConfig`, unit-tested).
 - 🔵 **Scientific dialogue.** Between understanding the intent and choosing a
   pipeline, Hirsh reviews the **experimental design** — biological replication,
   controls, confounders and batch effects, group balance, fit to the objective —
