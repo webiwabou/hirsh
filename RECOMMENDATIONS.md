@@ -106,8 +106,10 @@ Make every supported pipeline safe to run for real and make its output land as
     ignored; it links, never rewriting sequence data; grouping still follows the
     filename convention (ambiguous R1/R2 still asks). The same content fallback
     also covers the **protein-FASTA branch** (proteinfamilies): a FASTA recognized
-    by content is symlinked to a canonical `.fasta` name.
-    - ⬜ Remaining: recognizing more binary formats (SRA/pod5) by magic bytes.
+    by content is symlinked to a canonical `.fasta` name. Unsupported binary
+    formats are named specifically by magic bytes — BAM, CRAM, HDF5/fast5, POD5,
+    SRA — so the "convert to FASTQ first" hint is precise (an undetected binary
+    still degrades to a generic "binary" warning, never mislabeled as usable).
 - ✅ **Schema-validated LLM outputs** with one self-correcting retry. Tool-call
   arguments (intent, pipeline selection, composition planning) are validated with
   Zod via `llm/structured.ts`; on a missing/invalid call the model is re-prompted

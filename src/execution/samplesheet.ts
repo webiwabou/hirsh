@@ -135,9 +135,15 @@ export function classifySequenceText(head: string): SequenceFormat | null {
 const BINARY_MAGICS: Array<{ magic: number[]; label: string }> = [
   { magic: [0x42, 0x41, 0x4d, 0x01], label: "BAM" }, // "BAM\1"
   { magic: [0x89, 0x48, 0x44, 0x46], label: "HDF5 (fast5)" }, // \x89HDF
+  { magic: [0x8b, 0x50, 0x4f, 0x44, 0x0d, 0x0a, 0x1a, 0x0a], label: "POD5" }, // \x8bPOD\r\n\x1a\n
+  { magic: [0x4e, 0x43, 0x42, 0x49, 0x2e, 0x73, 0x72, 0x61], label: "SRA" }, // "NCBI.sra"
 ];
 
-/** Detects a few well-known binary sequence formats by magic bytes. Pure. */
+/**
+ * Detects a few well-known binary sequence formats by magic bytes. Pure. A
+ * best-effort label — an undetected binary still degrades to "binary" upstream,
+ * so a near-miss never mislabels a supported file as usable.
+ */
 export function detectBinaryMagic(bytes: Uint8Array): string | null {
   for (const { magic, label } of BINARY_MAGICS) {
     if (magic.every((b, i) => bytes[i] === b)) return label;

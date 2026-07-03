@@ -28,10 +28,13 @@ describe("classifySequenceText", () => {
 });
 
 describe("detectBinaryMagic", () => {
-  it("flags BAM/CRAM/HDF5 and passes text through", () => {
+  it("flags BAM/CRAM/HDF5/POD5/SRA and passes text through", () => {
     expect(detectBinaryMagic(new Uint8Array([0x42, 0x41, 0x4d, 0x01]))).toBe("BAM");
     expect(detectBinaryMagic(new Uint8Array([0x43, 0x52, 0x41, 0x4d]))).toBe("CRAM");
     expect(detectBinaryMagic(new Uint8Array([0x89, 0x48, 0x44, 0x46]))).toBe("HDF5 (fast5)");
+    expect(detectBinaryMagic(new Uint8Array([0x8b, 0x50, 0x4f, 0x44, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe("POD5");
+    // "NCBI.sra"
+    expect(detectBinaryMagic(new Uint8Array([0x4e, 0x43, 0x42, 0x49, 0x2e, 0x73, 0x72, 0x61]))).toBe("SRA");
     expect(detectBinaryMagic(new Uint8Array([0x40, 0x72, 0x65]))).toBeNull(); // "@re"
   });
 });

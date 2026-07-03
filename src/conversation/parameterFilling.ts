@@ -271,7 +271,7 @@ async function resolveFastqScan(io: AgentIO, dir: string, runDir: string): Promi
     if (sniffed.unsupported.length > 0) {
       io.info(
         "I can read plain or gzipped FASTQ/FASTA. Convert aligned/binary formats (BAM/CRAM/SRA/" +
-          "fast5) to FASTQ first — e.g. `samtools fastq input.bam`.",
+          "fast5/pod5) to FASTQ first — e.g. `samtools fastq input.bam`.",
       );
     }
     return scan; // empty
