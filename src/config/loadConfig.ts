@@ -241,3 +241,15 @@ export function resolveOpenAIApiKey(config: HirshConfig): string | null {
   const key = process.env[config.openai.apiKeyEnv];
   return key && key.trim().length > 0 ? key : null;
 }
+
+/**
+ * Heuristic: does this value look like a pasted API key rather than the NAME of
+ * an environment variable? A very common misconfiguration is putting the secret
+ * itself in `apiKeyEnv`. Detects known key prefixes and long random-looking
+ * strings (real env-var names are short and conventionally UPPER_SNAKE_CASE).
+ */
+export function looksLikeApiKeySecret(value: string): boolean {
+  const v = value.trim();
+  if (/^(gsk_|sk-|sk_|xai-|AIza|hf_|co-)/.test(v)) return true;
+  return v.length >= 30 && /[a-z]/.test(v) && /[A-Z0-9]/.test(v);
+}
