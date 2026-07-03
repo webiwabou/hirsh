@@ -251,7 +251,9 @@ Every run also writes a **reproducibility bundle** into its run directory —
 `run_manifest.json` and a plain-language `PROVENANCE.md` recording the pipeline
 and pinned revision, the exact command, resolved parameters, samplesheet,
 environment and execution status — so an analysis can be archived, shared and
-reproduced.
+reproduced. After a real run it also records the **container images Nextflow
+actually used** (read from its execution trace, digest-pinned where resolved),
+for byte-exact reproduction.
 
 ## Autonomous mode
 

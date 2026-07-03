@@ -119,8 +119,11 @@ Make every supported pipeline safe to run for real and make its output land as
   the exact command, resolved params (`params.yaml`), samplesheet, environment
   (Nextflow version, container engine, machine/OS), LLM used, and execution status
   — for prepared-but-not-run commands too (`execution/provenance.ts`, unit-tested).
-  - ⬜ Remaining: capture resolved container image digests (from the Nextflow run
-    report) for byte-exact reproducibility.
+  After a real run it also **captures the container images Nextflow actually used**
+  — read from the nf-core execution trace (`pipeline_info/execution_trace_*.txt`)
+  and recorded in the manifest + PROVENANCE.md, digest-pinned where the engine
+  resolved one — for byte-exact reproduction (`parseTraceContainers`/
+  `readRunContainers`, unit-tested; empty for conda/prepared runs, stated honestly).
 - ✅ **Resume & re-run.** After a run, Hirsh offers to run it again — reusing cached
   results with `-resume`, or after changing one parameter (rebuilding `params.yaml`
   and the command, preserving the chosen backend/executor). The `-resume` flag is

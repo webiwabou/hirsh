@@ -49,6 +49,7 @@ src/
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)
 │   ├── git.ts        git init + initial commit for a generated project (Phase 5)
 │   ├── publish.ts    assisted GitHub publishing via `gh` (opt-in, private by default) (Phase 5)
+│   ├── provenance.ts run manifest + PROVENANCE.md, incl. container images from the execution trace (Phase 2)
 │   ├── resources.ts  machine detection + whole-pipeline and per-process memory assessment (ok/adapt/refuse)
 │   ├── samplesheet.ts  FASTQ scanning (by extension and by content), pair inference, canonical-name symlinks, CSV writing
 │   └── runner.ts     spawns `nextflow`, streams stdout/stderr, forwards SIGINT
