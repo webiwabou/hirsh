@@ -392,11 +392,17 @@ one-off analysis into reusable, community-grade software.
   profile** first (a smoke test on placeholder data, labelled honestly), and if a
   real run is chosen without an input samplesheet Hirsh doesn't launch a doomed run
   — it warns and offers the test profile instead.
-  - ⬜ Remaining: **build the composed pipeline's samplesheet for the scientist**
-    from a sequence/FASTA they already gave (today they must point at an existing
-    CSV — a scientist who pasted a single FASTA expects Hirsh to make the sheet);
-    bundle realistic test data so the test profile gives *real* results, not just a
-    smoke test; and a fuller results interpretation from declared outputs.
+  - ✅ **Builds the composed pipeline's samplesheet** from a sequence file/folder:
+    at the input step the scientist can point at a `.fasta`/`.fastq` (or a folder)
+    with `@`, and Hirsh writes the `sample,fastq_1,fastq_2` sheet — inferring FASTQ
+    pairs, recognizing sequences by content when extensions are non-standard, or one
+    row for a single file — instead of demanding a hand-written CSV
+    (`composedRowsFromFiles`/`resolveComposedInput`, unit-tested).
+  - ⬜ Remaining: match the composed input *channel* to the actual data kind (today
+    the generator hard-codes a reads-style reader, so a protein FASTA is wired
+    generically); bundle realistic test data so the test profile gives *real*
+    results, not just a smoke test; and a fuller results interpretation from
+    declared outputs.
 - 🔵 **Provenance for novelty.** Generated projects already separate what was reused
   from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
   the custom local tools ("not from nf-core"); `modules.json` pins only the real
