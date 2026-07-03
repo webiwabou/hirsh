@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   addRun,
   emptyMemory,
   extractReferences,
   knownReferences,
+  loadMemory,
   preferredEnvironment,
   relevantRuns,
+  saveMemory,
   scoreRun,
   type RunRecord,
 } from "../src/memory/store.js";
@@ -27,6 +32,30 @@ describe("addRun", () => {
     const b = addRun(a, run({ pipeline: "b" }));
     expect(b.runs.map((r) => r.pipeline)).toEqual(["b", "a"]);
     expect(b.version).toBe(1);
+  });
+
+  it("preserves the consent flag across records", () => {
+    const withConsent = { version: 1 as const, runs: [], consent: true };
+    expect(addRun(withConsent, run({})).consent).toBe(true);
+    expect(addRun({ version: 1, runs: [], consent: false }, run({})).consent).toBe(false);
+    expect(addRun(emptyMemory(), run({})).consent).toBeUndefined();
+  });
+});
+
+describe("memory consent persistence", () => {
+  it("round-trips the consent flag through save/load", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hirsh-consent-"));
+    const path = join(dir, "memory.json");
+    try {
+      saveMemory(path, { version: 1, runs: [run({})], consent: false });
+      expect(loadMemory(path).consent).toBe(false);
+      saveMemory(path, { version: 1, runs: [], consent: true });
+      expect(loadMemory(path).consent).toBe(true);
+      // A file without the field loads as undefined (not asked yet).
+      expect(loadMemory(join(dir, "nope.json")).consent).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

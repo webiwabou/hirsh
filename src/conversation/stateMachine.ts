@@ -146,6 +146,7 @@ export function coerceLike(
 
 export class Agent {
   private memory: MemoryData | null = null;
+  private consentChecked = false;
 
   constructor(
     private readonly provider: LLMProvider,
@@ -155,6 +156,7 @@ export class Agent {
   ) {}
 
   async run(session: Session): Promise<void> {
+    await this.ensureMemoryConsent();
     await this.phaseIntent(session);
     this.surfacePastRuns(session.query);
     if (!(await this.phaseDesignReview(session))) {
@@ -1230,9 +1232,42 @@ export class Agent {
     return this.memory;
   }
 
-  /** Shows relevant past analyses from project memory (opt-out via config). */
-  private surfacePastRuns(query: QueryContext): void {
+  /** Memory is usable only if enabled in config AND the user hasn't declined it. */
+  private memoryEnabled(): boolean {
+    return this.config.memory.enabled && this.mem().consent !== false;
+  }
+
+  /**
+   * First-run consent for project memory: asks once, then remembers the answer so
+   * it's never asked again. Declining stores consent=false so nothing is recorded.
+   * Honest about privacy — the store is local and never uploaded.
+   */
+  private async ensureMemoryConsent(): Promise<void> {
+    if (this.consentChecked) return;
+    this.consentChecked = true;
     if (!this.config.memory.enabled) return;
+    const data = this.mem();
+    if (data.consent !== undefined) return; // already decided in a past session
+
+    const ok = await this.io.confirm(
+      `Can I remember your analyses across sessions? They're kept in a local, private file ` +
+        `(${this.memoryPath()}) — never uploaded — so I can pick up where you left off.`,
+      true,
+    );
+    this.memory = { ...data, consent: ok };
+    try {
+      saveMemory(this.memoryPath(), this.memory);
+    } catch {
+      /* best-effort */
+    }
+    if (!ok) {
+      this.io.info("Okay — I won't keep a project memory. Enable it later with memory.enabled in config.");
+    }
+  }
+
+  /** Shows relevant past analyses from project memory (opt-out via config/consent). */
+  private surfacePastRuns(query: QueryContext): void {
+    if (!this.memoryEnabled()) return;
     const past = relevantRuns(this.mem(), query, 3);
     if (past.length === 0) return;
     this.io.info("From your project memory — similar past analyses:");
@@ -1247,7 +1282,7 @@ export class Agent {
 
   /** Collects remembered references/samplesheets from relevant past runs. */
   private memorySuggestions(query: QueryContext): MemorySuggestions {
-    if (!this.config.memory.enabled) return { references: {}, samplesheets: [] };
+    if (!this.memoryEnabled()) return { references: {}, samplesheets: [] };
     const references: Record<string, string[]> = {};
     const samplesheets: string[] = [];
     for (const r of relevantRuns(this.mem(), query, 5)) {
@@ -1267,7 +1302,7 @@ export class Agent {
    * can't force a bad default.
    */
   private envPreference(): EnvironmentPreference {
-    if (!this.config.memory.enabled) return {};
+    if (!this.memoryEnabled()) return {};
     const pref = preferredEnvironment(this.mem());
     return {
       engine: pref.engine && pref.engine in BACKENDS ? pref.engine : undefined,
@@ -1278,7 +1313,7 @@ export class Agent {
 
   /** Records a run into project memory (best-effort; never blocks). */
   private recordRun(session: Session, executed: boolean, exitCode?: number): void {
-    if (!this.config.memory.enabled) return;
+    if (!this.memoryEnabled()) return;
     const pipeline = session.selectedPipeline;
     if (!pipeline) return;
     try {
@@ -2091,7 +2126,7 @@ export class Agent {
     executed: boolean,
     exitCode?: number,
   ): void {
-    if (!this.config.memory.enabled) return;
+    if (!this.memoryEnabled()) return;
     try {
       const record: RunRecord = {
         date: new Date().toISOString(),

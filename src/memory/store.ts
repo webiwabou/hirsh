@@ -40,6 +40,11 @@ export interface RunRecord {
 export interface MemoryData {
   version: 1;
   runs: RunRecord[];
+  /**
+   * Whether the user consented to project memory (asked once on first run).
+   * undefined = not asked yet; true = remember; false = declined (don't ask again).
+   */
+  consent?: boolean;
 }
 
 const MAX_RUNS = 200;
@@ -68,7 +73,7 @@ export function extractReferences(
 
 /** Prepends a run record, keeping the list bounded (newest first). Pure. */
 export function addRun(data: MemoryData, record: RunRecord): MemoryData {
-  return { version: 1, runs: [record, ...data.runs].slice(0, MAX_RUNS) };
+  return { version: 1, consent: data.consent, runs: [record, ...data.runs].slice(0, MAX_RUNS) };
 }
 
 function norm(s?: string): string {
@@ -149,7 +154,11 @@ export function loadMemory(path: string): MemoryData {
     if (!existsSync(path)) return emptyMemory();
     const parsed = JSON.parse(readFileSync(path, "utf8")) as MemoryData;
     if (!parsed || !Array.isArray(parsed.runs)) return emptyMemory();
-    return { version: 1, runs: parsed.runs };
+    return {
+      version: 1,
+      runs: parsed.runs,
+      consent: typeof parsed.consent === "boolean" ? parsed.consent : undefined,
+    };
   } catch {
     return emptyMemory();
   }
