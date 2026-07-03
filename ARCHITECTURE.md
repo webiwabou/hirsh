@@ -68,7 +68,7 @@ src/
 │   ├── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
 │   └── methods.ts    publication-ready methods paragraph + refs from pinned/tool versions (Phase 6)
 └── memory/
-    └── store.ts      persistent project memory — past runs, references, recall (Phase 6)
+    └── store.ts      persistent project memory — past runs, references, recall, remembered backend/executor (Phase 6)
 
 test/                 Vitest suite for the pure logic (resources, samplesheet,
                       command building, config loading, workflow generation)

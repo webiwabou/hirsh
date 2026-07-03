@@ -264,8 +264,17 @@ references used, output directory and status. When a new request resembles a pas
 one, it surfaces the relevant history ("From your project memory — similar past
 analyses: …") so you can pick up where you left off. During parameterization it
 also offers to **reuse a remembered reference** (genome/FASTA/GTF) or
-**samplesheet** from a relevant past run, so you don't retype them. It's on by
-default and stays on your machine; disable it with `memory.enabled: false`.
+**samplesheet** from a relevant past run, so you don't retype them.
+
+It also remembers the **execution environment** you last used *on this machine*
+(the backend — Docker/Singularity/Conda/Mamba — and the executor with its queue)
+and defaults to it before the next run instead of the static config, announcing
+the choice and still letting you switch. Since the store is per-home (per-machine),
+your laptop keeps defaulting to e.g. Docker+local while your HPC login node
+defaults to Singularity+Slurm, with no re-picking each session.
+
+It's on by default and stays on your machine; disable it with
+`memory.enabled: false`.
 
 ## Resource awareness
 

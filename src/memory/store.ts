@@ -27,7 +27,12 @@ export interface RunRecord {
   /** A few reference values worth remembering (genome/fasta/gtf). */
   references?: Record<string, string>;
   engine?: string;
+  /** Human description of the executor (for display/provenance). */
   executor?: string;
+  /** Raw executor id (local/slurm/…) — used to re-propose the target. */
+  executorName?: string;
+  /** Queue/partition for a cluster/cloud executor — re-proposed with it. */
+  queue?: string;
   executed: boolean;
   exitCode?: number;
 }
@@ -99,6 +104,32 @@ export function relevantRuns(data: MemoryData, query: QueryContext, limit = 3): 
     .sort((a, b) => b.s - a.s || b.r.date.localeCompare(a.r.date))
     .slice(0, limit)
     .map((x) => x.r);
+}
+
+/** A remembered environment choice, re-proposed as the default on this machine. */
+export interface EnvironmentPreference {
+  engine?: string;
+  /** Raw executor id (local/slurm/…). */
+  executor?: string;
+  queue?: string;
+}
+
+/**
+ * The backend/executor most recently used on this machine (memory is per-home,
+ * so per-machine). Re-proposed as the default so the scientist doesn't re-pick
+ * the same environment every session. Pure; scans newest-first.
+ */
+export function preferredEnvironment(data: MemoryData): EnvironmentPreference {
+  const pref: EnvironmentPreference = {};
+  for (const r of data.runs) {
+    if (pref.engine === undefined && r.engine) pref.engine = r.engine;
+    if (pref.executor === undefined && r.executorName) {
+      pref.executor = r.executorName;
+      pref.queue = r.queue;
+    }
+    if (pref.engine !== undefined && pref.executor !== undefined) break;
+  }
+  return pref;
 }
 
 /** Distinct reference values seen across past runs (for suggestions). */

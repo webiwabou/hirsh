@@ -7,7 +7,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { HirshConfig } from "../config/types.js";
+import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
@@ -22,6 +22,7 @@ import {
   buildExecutorConfig,
   chooseExecutor,
   describeExecutor,
+  EXECUTORS,
 } from "../execution/executor.js";
 import { negotiateInfrastructure } from "../execution/negotiation.js";
 import {
@@ -30,8 +31,10 @@ import {
   emptyMemory,
   extractReferences,
   loadMemory,
+  preferredEnvironment,
   relevantRuns,
   saveMemory,
+  type EnvironmentPreference,
   type MemoryData,
   type RunRecord,
 } from "../memory/store.js";
@@ -734,6 +737,22 @@ export class Agent {
     return { references, samplesheets };
   }
 
+  /**
+   * The backend/executor remembered from the most recent run on this machine
+   * (empty when memory is disabled or nothing is remembered). Only values that
+   * are still valid engines/executors are returned, so a stale/corrupt record
+   * can't force a bad default.
+   */
+  private envPreference(): EnvironmentPreference {
+    if (!this.config.memory.enabled) return {};
+    const pref = preferredEnvironment(this.mem());
+    return {
+      engine: pref.engine && pref.engine in BACKENDS ? pref.engine : undefined,
+      executor: pref.executor && pref.executor in EXECUTORS ? pref.executor : undefined,
+      queue: pref.queue,
+    };
+  }
+
   /** Records a run into project memory (best-effort; never blocks). */
   private recordRun(session: Session, executed: boolean, exitCode?: number): void {
     if (!this.config.memory.enabled) return;
@@ -753,6 +772,8 @@ export class Agent {
         references: extractReferences(session.paramValues),
         engine: session.engine ?? this.config.execution.containerEngine,
         executor: session.executor ? describeExecutor(session.executor) : "local machine",
+        executorName: session.executor?.executor ?? "local",
+        queue: session.executor?.queue,
         executed,
         exitCode,
       };
@@ -941,7 +962,19 @@ export class Agent {
     let statuses = await this.io.withSpinner("Checking execution backends", () =>
       detectBackends(),
     );
-    let chosen = await chooseBackend(this.io, statuses, this.config.execution.containerEngine);
+
+    // Phase 6: default to the backend remembered from the last run on this
+    // machine (if it's still valid), otherwise the configured default. Only a
+    // preview of the default — the user still confirms/switches below.
+    const remembered = this.envPreference().engine as ContainerEngine | undefined;
+    const preferred = remembered ?? this.config.execution.containerEngine;
+    if (remembered && remembered !== this.config.execution.containerEngine) {
+      this.io.info(
+        `From your project memory: the last run on this machine used ${BACKENDS[remembered].label}; ` +
+          "I'll default to it (you can still switch).",
+      );
+    }
+    let chosen = await chooseBackend(this.io, statuses, preferred);
 
     // Phase 3: nothing available → offer to install Conda/Mamba (Miniforge) so a
     // fresh machine can still run, then re-detect and choose.
@@ -971,8 +1004,20 @@ export class Agent {
    * Nextflow `-c` config selecting the executor and records it on the session.
    */
   private async phaseExecutor(session: Session, runDir: string): Promise<void> {
-    const configured = this.config.execution.executor ?? "local";
-    const settings = await chooseExecutor(this.io, configured, this.config.execution.queue);
+    // Phase 6: default to where the last run on this machine went (executor +
+    // queue), falling back to the configured executor. Still confirmed below.
+    const pref = this.envPreference();
+    const remembered = pref.executor as ExecutorName | undefined;
+    const configured = remembered ?? this.config.execution.executor ?? "local";
+    const defaultQueue = (remembered ? pref.queue : undefined) ?? this.config.execution.queue;
+    if (remembered && remembered !== (this.config.execution.executor ?? "local")) {
+      this.io.info(
+        `From your project memory: the last run on this machine used ${EXECUTORS[remembered].label}` +
+          (pref.queue ? ` (queue "${pref.queue}")` : "") +
+          "; I'll default to it (you can still switch).",
+      );
+    }
+    const settings = await chooseExecutor(this.io, configured, defaultQueue);
     session.executor = settings;
 
     const configText = buildExecutorConfig(settings);

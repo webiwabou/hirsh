@@ -4,6 +4,7 @@ import {
   emptyMemory,
   extractReferences,
   knownReferences,
+  preferredEnvironment,
   relevantRuns,
   scoreRun,
   type RunRecord,
@@ -52,6 +53,39 @@ describe("scoreRun / relevantRuns", () => {
 
   it("returns nothing for an unrelated query", () => {
     expect(relevantRuns(data, { organism: "zebrafish", dataType: "ATAC" }, 3)).toEqual([]);
+  });
+});
+
+describe("preferredEnvironment", () => {
+  it("returns nothing for empty memory", () => {
+    expect(preferredEnvironment(emptyMemory())).toEqual({});
+  });
+
+  it("takes the most recent engine and executor (newest is first)", () => {
+    const data = {
+      version: 1 as const,
+      runs: [
+        run({ engine: "conda", executorName: "slurm", queue: "short" }),
+        run({ engine: "docker", executorName: "local" }),
+      ],
+    };
+    expect(preferredEnvironment(data)).toEqual({ engine: "conda", executor: "slurm", queue: "short" });
+  });
+
+  it("falls through runs missing a field to the next one that has it", () => {
+    const data = {
+      version: 1 as const,
+      runs: [
+        run({ engine: undefined, executorName: undefined }),
+        run({ engine: "mamba", executorName: "sge", queue: "all.q" }),
+      ],
+    };
+    expect(preferredEnvironment(data)).toEqual({ engine: "mamba", executor: "sge", queue: "all.q" });
+  });
+
+  it("carries no queue when the remembered executor had none", () => {
+    const data = { version: 1 as const, runs: [run({ engine: "docker", executorName: "local" })] };
+    expect(preferredEnvironment(data)).toEqual({ engine: "docker", executor: "local", queue: undefined });
   });
 });
 

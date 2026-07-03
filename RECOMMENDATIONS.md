@@ -300,8 +300,18 @@ The full realization: a scientific collaborator, not a command builder.
   run, so you don't re-enter them. Enabled by default, disable with
   `memory.enabled: false` (`memory/store.ts` + Phase C reuse, unit-tested;
   persistence verified round-trip).
-  - ⬜ Remaining: remember backend/executor preferences, and a first-run consent
-    prompt.
+  - ✅ **Remembered environment preferences.** Memory also records the execution
+    backend and executor (with queue) each run used, and before the next run Hirsh
+    **defaults to the backend/executor last used on this machine** (memory is
+    per-home, so per-machine) instead of the static config — announcing it ("the
+    last run on this machine used Conda; I'll default to it") and still letting you
+    switch. Stale/invalid records are ignored, so a bad value can't force a wrong
+    default (`preferredEnvironment` in `memory/store.ts`, unit-tested; wired into
+    the backend/executor selection). This directly serves the multi-machine story:
+    your laptop keeps defaulting to Docker+local, your HPC login node to
+    Singularity+Slurm, without re-picking each session.
+  - ⬜ Remaining: a first-run consent prompt, and persisting the choice back to the
+    config file.
 - 🔵 **Scientific dialogue.** Between understanding the intent and choosing a
   pipeline, Hirsh reviews the **experimental design** — biological replication,
   controls, confounders and batch effects, group balance, fit to the objective —
