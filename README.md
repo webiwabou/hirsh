@@ -308,15 +308,19 @@ backend/executor you already chose. It always asks first and never auto-chains; 
 an expected output or a required input is missing, it degrades gracefully and
 leaves everything prepared for you.
 
-Once the follow-up finishes, Hirsh **interprets its results biologically**, just
-like a primary run: it parses the per-contrast differential-expression tables into
-concrete numbers — how many genes are significant and the up/down split (padj<0.05,
-|log2FC|>1 by default) — and explains what they mean for your objective, revisiting
-any design caveats flagged before the run and pointing you at the HTML report.
+The follow-up is treated as a first-class run: before launching, a **light
+resource check** compares its typical memory needs against your machine (asking
+honestly if it won't fit); once it finishes, Hirsh **interprets its results
+biologically**, just like a primary run — parsing the per-contrast
+differential-expression tables into concrete numbers (how many genes are
+significant and the up/down split, padj<0.05, |log2FC|>1 by default) and explaining
+what they mean for your objective, revisiting any design caveats and pointing you
+at the HTML report. It also **remembers the run** in project memory and offers a
+paste-ready **methods paragraph** for the follow-up.
 
-> **Limitation.** The follow-up run skips the resource pre-flight and isn't yet
-> recorded in project memory or turned into a methods paragraph. See
-> [RECOMMENDATIONS.md](RECOMMENDATIONS.md), Phase 2.
+> **Limitation.** Chaining is one step deep (rnaseq → differentialabundance); a
+> full pipeline DAG and runnable follow-ups for other pipelines are on the roadmap.
+> See [RECOMMENDATIONS.md](RECOMMENDATIONS.md), Phase 2.
 
 ## Resource awareness
 

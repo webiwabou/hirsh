@@ -138,9 +138,15 @@ Make every supported pipeline safe to run for real and make its output land as
   padj<0.05, |log2FC|>1 by default) — then asks the LLM for a plain-language
   summary in the context of the objective, revisiting the same pre-run design
   caveats and surfacing the HTML report (`results/parsers.ts::countDifferential`
-  and the `de_table_dir` output kind, unit-tested).
-  - ⬜ Remaining: a resource pre-flight for the follow-up run, recording it in
-    project memory, and a paste-ready methods paragraph for the follow-up.
+  and the `de_table_dir` output kind, unit-tested). The follow-up is now a
+  first-class run: a **light resource pre-flight** checks its declared memory
+  guidance against the budget before running (honest ask if it won't fit; skipped
+  on a scheduler), it's **recorded in project memory** (so it surfaces next
+  session), and it gets its own **publication-ready methods** paragraph — the
+  methods generator is shared with the primary run
+  (`followUpResourceCheck`/`recordFollowUpRun`/`generateMethods`).
+  - ⬜ Remaining: chain further follow-ups (a DAG of pipelines), and a runnable
+    follow-up for pipelines beyond rnaseq.
 
 ## Phase 3 — Environment & infrastructure autonomy ✅ (shipped; Docker install stays guided)
 
