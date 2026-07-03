@@ -77,12 +77,18 @@ import {
 } from "../execution/resources.js";
 import { buildManifest, readRunContainers, writeProvenance } from "../execution/provenance.js";
 import type { EnvReport } from "../execution/envCheck.js";
-import { findHtmlReports, gatherResults, summarizeResults } from "../results/interpreter.js";
+import {
+  findHtmlReports,
+  gatherResults,
+  summarizeResults,
+  type InterpretablePipeline,
+} from "../results/interpreter.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
-import { generatePipeline } from "../composition/generator.js";
+import { generatePipeline, type GenerationResult } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
+import { buildComposedRunCommand, type ComposedRunParam } from "../composition/run.js";
 import { collectLocalTool, toNfCoreModule, type LocalToolSpec } from "../composition/localModule.js";
 import { proposeLocalTools } from "../composition/localToolProposal.js";
 import { writeContribution } from "../composition/contribution.js";
@@ -94,6 +100,7 @@ import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
 import { reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
+import { classifyPathAnswer } from "./pathInput.js";
 import { selectPipeline } from "./pipelineSelection.js";
 import type { AgentIO } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
@@ -583,6 +590,12 @@ export class Agent {
       if (stub.error) this.io.warn(stub.error);
     }
 
+    // Phase 5 — try-before-you-publish: once it's validated to run, offer to run it
+    // on the scientist's own data and interpret the results, before any packaging.
+    if (stub.ok) {
+      await this.offerComposedRun(session, result, resolved);
+    }
+
     if (validation.nfCoreCli.available) {
       const doLint = await this.io.confirm("Run `nf-core lint` on the generated project now?", true);
       if (doLint) {
@@ -607,19 +620,154 @@ export class Agent {
       this.io.info(validation.nfCoreCli.note);
     }
 
-    // Phase 5: optional standards-compliant packaging and assisted publishing.
+    // Phase 5: packaging/publishing framed as a recommendation, not a gate — when
+    // the scientist is happy with the pipeline, Hirsh can help share it.
+    this.io.say(
+      "\nWhenever you're happy with this pipeline, I can help you polish and share it — " +
+        "no rush. Tell me if there's anything you'd change first.",
+    );
     await this.phasePackaging(result.dir, resolved, validation.nfCoreCli.available);
 
     // Phase 5: offer to prepare any custom local tools as nf-core/modules
     // contributions (files + nf-test; the PR stays a human-in-the-loop step).
     await this.offerContribution(resolved, this.config.execution.workdir);
 
-    this.io.say("\nNext steps:");
-    this.io.info(`  • Real run: cd ${result.dir} && nextflow run . -profile docker --input samplesheet.csv --outdir results`);
+    this.io.say("\nThe pipeline lives at " + result.dir + ".");
+    this.io.info(
+      "  • Run it again anytime: cd " +
+        result.dir +
+        " && nextflow run . -profile docker --input samplesheet.csv --outdir results",
+    );
     if (result.referenceParams.length > 0) {
       this.io.info("  • Provide the reference parameters above for real data.");
     }
-    this.io.info("  • The test profile uses placeholder data for the stub run; swap in real test data for a functional test.");
+    this.io.info(
+      "  • When it's ready, publishing to GitHub / contributing to nf-core is always available — " +
+        "just ask, and share any feedback you have on the result.",
+    );
+  }
+
+  /**
+   * Phase 5 — try-before-you-publish. Offers to run a freshly composed pipeline on
+   * the scientist's own data (samplesheet + reference params) and interpret the
+   * results, reusing the chosen backend/executor. Best-effort: a composed pipeline
+   * is a draft, so a failed run is reported and the flow continues to packaging.
+   */
+  private async offerComposedRun(
+    session: Session,
+    result: GenerationResult,
+    resolved: ResolvedComposition,
+  ): Promise<void> {
+    const go = await this.io.confirm(
+      "Try this pipeline on your own data now (a real run)?",
+      true,
+    );
+    if (!go) {
+      this.io.info("Okay — you can run it later; I'll show the exact command at the end.");
+      return;
+    }
+
+    // Choose backend + executor (reuses the normal selection; writes any -c config).
+    await this.phaseEnvironment(session);
+    await this.phaseExecutor(session, result.dir);
+    const engine = session.engine ?? this.config.execution.containerEngine;
+
+    // Samplesheet (--input) and any reference parameters, all path-aware (@).
+    const input = await this.askComposedPath(
+      "Path to your input samplesheet CSV (reference with @, or Enter to skip):",
+    );
+    const refParams: ComposedRunParam[] = [];
+    if (result.referenceParams.length > 0) {
+      this.io.info(
+        "These are inputs the pipeline needs (references/indexes). Give a value for the ones you " +
+          "have; press Enter to skip any you don't.",
+      );
+      for (const name of result.referenceParams) {
+        const value = await this.askComposedPath(`  --${name} (path/value, @ to reference, Enter to skip):`);
+        if (value) refParams.push({ name, value });
+      }
+    }
+
+    const outdir = join(result.dir, "results");
+    const env = await this.ensureNextflow(engine);
+    if (!env) {
+      this.io.warn("Can't run — Nextflow or the backend isn't available. The command is shown at the end.");
+      return;
+    }
+
+    const command = buildComposedRunCommand({
+      dir: result.dir,
+      engine,
+      input: input || undefined,
+      outdir,
+      refParams,
+      extraConfigs: session.executorConfigPath ? [session.executorConfigPath] : [],
+    });
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + command.join(" "));
+    const run = await this.io.confirm("Run it now?", true, { auto: true });
+    if (!run) {
+      this.io.info("Not running. The command is ready above.");
+      return;
+    }
+
+    this.io.heading(`Running ${resolved.plan.pipelineName} (live log)`);
+    const res = await runNextflow(command, result.dir, this.io, session.runEnv);
+    if (res.exitCode !== 0) {
+      this.io.warn(`The run exited with an error (code ${res.exitCode}). Composed pipelines are drafts — this may need a wiring or parameter fix.`);
+      if (res.errorSummary) this.io.say(res.errorSummary);
+      return;
+    }
+    this.io.say("Run completed successfully.");
+    await this.interpretComposedRun(session, resolved, outdir);
+  }
+
+  /** Asks for a path/value with `@` reference support; empty means skip. */
+  private async askComposedPath(prompt: string): Promise<string> {
+    const raw = (await this.io.ask(prompt)).trim();
+    const ans = classifyPathAnswer(raw);
+    if (ans.kind === "path") return resolve(ans.path);
+    if (ans.kind === "text") return ans.text; // a non-path value (e.g. an iGenomes key)
+    return "";
+  }
+
+  /** Ensures Nextflow + backend are usable (offers bootstrap); returns false if not. */
+  private async ensureNextflow(engine: ContainerEngine): Promise<boolean> {
+    let env = await checkEnvironment(engine);
+    if (!env.nextflow.available) {
+      const boot = await bootstrapNextflow(this.io);
+      this.io.info(boot.message);
+      if (boot.installed) env = await checkEnvironment(engine);
+    }
+    return env.canExecute;
+  }
+
+  /** Light biological interpretation of a composed pipeline's real-run outputs. */
+  private async interpretComposedRun(
+    session: Session,
+    resolved: ResolvedComposition,
+    outdir: string,
+  ): Promise<void> {
+    const interpretable: InterpretablePipeline = {
+      name: resolved.plan.pipelineName,
+      title: resolved.plan.description,
+      results: { outputs: [{ path: ".", description: "the pipeline's outputs", kind: "directory" }] },
+    };
+    const report = gatherResults(interpretable, outdir);
+    for (const html of findHtmlReports(outdir)) {
+      if (!report.htmlReports.includes(html)) report.htmlReports.push(html);
+    }
+    if (!report.outputs.some((o) => o.found)) {
+      this.io.info(`Results are in ${outdir}.`);
+      return;
+    }
+    this.io.say("\nResults summary:\n");
+    await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
+    this.io.endStream();
+    if (report.htmlReports.length > 0) {
+      this.io.info("HTML reports (open them in your browser):");
+      for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
   }
 
   /**
