@@ -5,8 +5,9 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
 import type { LLMProvider } from "../llm/index.js";
 import type { PipelineDefinition } from "../pipelines/types.js";
@@ -58,6 +59,11 @@ import {
   type Accession,
 } from "../execution/fetchngs.js";
 import { validateSamplesheetContent } from "../execution/samplesheet.js";
+import {
+  buildFollowUpCommand,
+  isRunnableFollowUp,
+  upstreamInputPaths,
+} from "../execution/followUp.js";
 import {
   assessResources,
   detectMachine,
@@ -1523,9 +1529,135 @@ export class Agent {
         `\nNext analysis step: when ${pipeline.followUp.when}, run ${pipeline.followUp.pipeline}. ` +
           pipeline.followUp.note,
       );
+      await this.phaseFollowUp(session, pipeline);
     }
 
     await this.offerMethods(session, pipeline);
+  }
+
+  /**
+   * Phase 2 — follow-up chaining. When the pipeline declares a *runnable*
+   * follow-up (e.g. rnaseq → differentialabundance), offers to launch it directly
+   * on the results just produced: it wires the upstream outputs into the
+   * follow-up's inputs, carries over shared params (e.g. gtf), asks for the few
+   * extra inputs the follow-up needs (a condition table, contrasts), and runs it
+   * through the usual confirmed-execution path. Reuses the chosen backend/executor.
+   * Always confirmed; never a silent auto-chain.
+   */
+  private async phaseFollowUp(session: Session, pipeline: PipelineDefinition): Promise<void> {
+    const fu = pipeline.followUp;
+    if (!isRunnableFollowUp(fu)) return; // suggestion-only follow-up: nothing to run
+    if (!session.outdir) return;
+
+    const offer = await this.io.confirm(
+      `Run the follow-up ${fu.pipeline} now, using these results as its input?`,
+      false,
+      { auto: true },
+    );
+    if (!offer) {
+      this.io.info(`Okay — you can run ${fu.pipeline} later on ${session.outdir}.`);
+      return;
+    }
+
+    const shortFu = fu.pipeline.split("/").pop() ?? fu.pipeline;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const runDir = resolve(this.config.execution.workdir, `${shortFu}-${ts}`);
+    const outdir = join(runDir, "results");
+    try {
+      mkdirSync(runDir, { recursive: true });
+    } catch (err) {
+      this.io.warn("Couldn't create a run directory: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+
+    const params: Record<string, string | number | boolean> = { outdir };
+
+    // Inputs sourced from the upstream run's outputs (e.g. the count matrix).
+    const upstream = upstreamInputPaths(fu, session.outdir);
+    for (const [param, path] of Object.entries(upstream)) {
+      if (existsSync(path)) {
+        params[param] = path;
+        this.io.info(`Using ${param} from the upstream run: ${path}`);
+      } else {
+        this.io.warn(`Expected upstream output not found: ${path}`);
+        const manual = (await this.io.ask(`Path for ${param} (or blank to skip):`)).trim();
+        if (manual) params[param] = resolve(manual);
+      }
+    }
+
+    // Params carried over from this run when they were set (e.g. gtf annotation).
+    for (const p of fu.carryParams ?? []) {
+      const v = session.paramValues[p];
+      if (v !== undefined && v !== "") {
+        params[p] = v;
+        this.io.info(`Carried ${p} from the upstream run.`);
+      }
+    }
+
+    // Extra inputs only the scientist can provide (condition table, contrasts).
+    for (const req of fu.requiredInputs ?? []) {
+      if (params[req.name] !== undefined) continue;
+      const ans = (
+        await this.io.ask(`${req.description}${req.optional ? " (optional — blank to skip)" : ""}\n  ${req.name}:`)
+      ).trim();
+      if (ans) {
+        params[req.name] = resolve(ans);
+      } else if (!req.optional) {
+        this.io.warn(`${req.name} is required for ${fu.pipeline}; not running the follow-up.`);
+        return;
+      }
+    }
+
+    const engine = session.engine ?? this.config.execution.containerEngine;
+    let env = await checkEnvironment(engine);
+    if (!env.nextflow.available) {
+      const boot = await bootstrapNextflow(this.io);
+      this.io.info(boot.message);
+      if (boot.installed) env = await checkEnvironment(engine);
+    }
+    if (!env.canExecute) {
+      this.io.warn(`Can't run ${fu.pipeline} — required software is missing. Inputs are prepared in ${runDir}.`);
+      return;
+    }
+
+    const paramsPath = join(runDir, "params.yaml");
+    try {
+      writeFileSync(paramsPath, stringifyYaml(params), "utf8");
+    } catch (err) {
+      this.io.warn("Couldn't write params.yaml: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+    const extraConfigs = session.executorConfigPath ? [session.executorConfigPath] : [];
+    const command = buildFollowUpCommand({
+      pipeline: fu.pipeline,
+      revision: fu.revision!,
+      engine,
+      paramsFile: paramsPath,
+      extraConfigs,
+    });
+
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + command.join(" "));
+    this.io.info(`Working directory: ${runDir}`);
+    const go = await this.io.confirm(`Run ${fu.pipeline} now?`, false, { auto: true });
+    if (!go) {
+      this.io.info(`Not running. The command and inputs are ready in ${runDir}.`);
+      return;
+    }
+
+    this.io.heading(`Running ${fu.pipeline} (live log)`);
+    const result = await runNextflow(command, runDir, this.io, session.runEnv);
+    if (result.exitCode !== 0) {
+      this.io.warn(`${fu.pipeline} exited with an error (code ${result.exitCode}).`);
+      if (result.errorSummary) this.io.say(result.errorSummary);
+      return;
+    }
+    this.io.say(`${fu.pipeline} completed successfully.`);
+    this.io.info(`Results: ${outdir}`);
+    this.io.info(
+      "Open its report/tables there for the differential-abundance results. " +
+        "(Full biological interpretation of a follow-up isn't automated yet.)",
+    );
   }
 
   /**

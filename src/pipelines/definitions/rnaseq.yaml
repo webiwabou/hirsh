@@ -115,6 +115,18 @@ followUp:
   pipeline: nf-core/differentialabundance
   when: your goal is differential expression (differentially expressed genes) between conditions
   note: rnaseq produces gene/transcript count matrices; nf-core/differentialabundance takes those counts plus a comparison design and calls the differentially expressed genes.
+  revision: 1.5.0
+  # The gene-count matrix rnaseq writes with the default star_salmon aligner.
+  inputsFromUpstream:
+    matrix: star_salmon/salmon.merged.gene_counts.tsv
+  # Reuse the annotation from this run if it was provided.
+  carryParams:
+    - gtf
+  requiredInputs:
+    - name: input
+      description: "samplesheet CSV with a 'sample' column and your condition/covariate columns (defines the comparison groups)"
+    - name: contrasts
+      description: "contrasts CSV (columns id,variable,reference,target) naming the comparison(s) to test"
 
 results:
   outdirParam: outdir

@@ -98,13 +98,39 @@ export interface PipelineDefinition {
   /**
    * Optional natural next analysis step, surfaced to the user (this pipeline's
    * output is the next one's input). E.g. rnaseq (counts) → differentialabundance
-   * (differentially expressed genes). We suggest, we do not auto-chain.
+   * (differentially expressed genes). We suggest, and — when the spec below is
+   * runnable — offer to run it directly (always with confirmation, never silently).
    */
-  followUp?: {
-    pipeline: string;
-    /** When this follow-up is relevant, in plain terms. */
-    when: string;
-    /** What the follow-up does with this pipeline's output. */
-    note: string;
-  };
+  followUp?: FollowUpSpec;
+}
+
+export interface FollowUpInput {
+  /** Follow-up param name (without "--"). */
+  name: string;
+  /** Plain-language prompt shown when asking the user for it. */
+  description: string;
+  /** When true, the run can proceed without it. */
+  optional?: boolean;
+}
+
+export interface FollowUpSpec {
+  pipeline: string;
+  /** When this follow-up is relevant, in plain terms. */
+  when: string;
+  /** What the follow-up does with this pipeline's output. */
+  note: string;
+  /**
+   * Pinned revision. Its presence marks the follow-up as *runnable*: Hirsh can
+   * offer to launch it, not just suggest it. Without it, it stays a suggestion.
+   */
+  revision?: string;
+  /**
+   * Follow-up params sourced from this pipeline's outputs: param name → path
+   * relative to the upstream outdir (e.g. matrix → star_salmon/salmon.merged.gene_counts.tsv).
+   */
+  inputsFromUpstream?: Record<string, string>;
+  /** Follow-up params carried over from this run's params when set (e.g. gtf). */
+  carryParams?: string[];
+  /** Extra inputs Hirsh must ask the user for (paths/values). */
+  requiredInputs?: FollowUpInput[];
 }
