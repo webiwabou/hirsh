@@ -15,7 +15,8 @@ import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { AgentIO } from "../conversation/io.js";
+import type { AgentIO, ChoiceOption } from "../conversation/io.js";
+import { chooseWith } from "../conversation/choice.js";
 import type { ContainerEngine } from "../config/types.js";
 
 const run = promisify(execFile);
@@ -168,33 +169,17 @@ export async function chooseBackend(
     return available[0];
   }
 
-  io.say("Available execution backends:");
-  available.forEach((engine, i) => {
-    const info = BACKENDS[engine];
-    const tags = [
-      engine === configured ? "configured" : "",
-      engine === recommended ? "recommended" : "",
-    ].filter(Boolean);
-    const suffix = tags.length ? ` [${tags.join(", ")}]` : "";
-    io.say(`  ${i + 1}) ${info.label}${suffix} — ${info.note}`);
+  // Recommended-options menu (arrow keys in a rich terminal; numbered otherwise).
+  const options: ChoiceOption[] = available.map((engine) => ({
+    value: engine,
+    label: BACKENDS[engine].label,
+    description: BACKENDS[engine].note,
+    recommended: engine === recommended,
+  }));
+  const picked = await chooseWith(io, "Which execution backend should I use?", options, {
+    allowCustom: false,
   });
-
-  const defaultIdx = available.indexOf(recommended) + 1;
-  const answer = (
-    await io.ask(`Which backend should I use? [${defaultIdx}]`)
-  ).trim();
-  if (answer === "") return recommended;
-
-  const n = Number.parseInt(answer, 10);
-  if (Number.isInteger(n) && n >= 1 && n <= available.length) {
-    return available[n - 1];
-  }
-  // Also accept the engine name typed directly.
-  const byName = available.find((e) => e === answer.toLowerCase());
-  if (byName) return byName;
-
-  io.warn(`I didn't understand "${answer}"; using ${BACKENDS[recommended].label}.`);
-  return recommended;
+  return (available as string[]).includes(picked) ? (picked as ContainerEngine) : recommended;
 }
 
 export interface BootstrapResult {

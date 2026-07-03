@@ -11,7 +11,8 @@
  * The config generation is pure (settings in, config text out) so it can be
  * unit-tested; the interactive selection is separated out.
  */
-import type { AgentIO } from "../conversation/io.js";
+import type { AgentIO, ChoiceOption } from "../conversation/io.js";
+import { chooseWith } from "../conversation/choice.js";
 import type { ExecutorName } from "../config/types.js";
 
 export interface ExecutorInfo {
@@ -128,27 +129,19 @@ export async function chooseExecutor(
   configured: ExecutorName,
   defaultQueue?: string,
 ): Promise<ExecutorSettings> {
-  io.say("Where should the pipeline run?");
-  EXECUTOR_ORDER.forEach((name, i) => {
-    const info = EXECUTORS[name];
-    const tag = name === configured ? " [configured]" : "";
-    io.say(`  ${i + 1}) ${info.label}${tag} — ${info.note}`);
+  // Recommended-options menu (arrow keys in a rich terminal; numbered otherwise).
+  const options: ChoiceOption[] = EXECUTOR_ORDER.map((name) => ({
+    value: name,
+    label: EXECUTORS[name].label,
+    description: EXECUTORS[name].note,
+    recommended: name === configured,
+  }));
+  const picked = await chooseWith(io, "Where should the pipeline run?", options, {
+    allowCustom: false,
   });
-
-  const defaultIdx = EXECUTOR_ORDER.indexOf(configured) + 1;
-  const answer = (await io.ask(`Choose where to run [${defaultIdx}]`)).trim();
-
-  let executor: ExecutorName = configured;
-  if (answer !== "") {
-    const n = Number.parseInt(answer, 10);
-    if (Number.isInteger(n) && n >= 1 && n <= EXECUTOR_ORDER.length) {
-      executor = EXECUTOR_ORDER[n - 1];
-    } else {
-      const byName = EXECUTOR_ORDER.find((e) => e === answer.toLowerCase());
-      if (byName) executor = byName;
-      else io.warn(`I didn't understand "${answer}"; using ${EXECUTORS[configured].label}.`);
-    }
-  }
+  const executor: ExecutorName = (EXECUTOR_ORDER as string[]).includes(picked)
+    ? (picked as ExecutorName)
+    : configured;
 
   const info = EXECUTORS[executor];
   const settings: ExecutorSettings = { executor };
