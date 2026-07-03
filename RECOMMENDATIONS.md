@@ -89,7 +89,10 @@ parameterize → confirm → run → interpret.
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation
 - ✅ Plain-language results summary + MultiQC pointer
-- ✅ Terminal UX (ASCII logo, framed banner, tips), global `hirsh` command
+- ✅ Terminal UX, global `hirsh` command — refreshed to a minimal look: a compact
+  one-line logo (`●──●──●  hirsh`) + tagline, a light framed welcome, section
+  headings with a cyan left bar, and a `⚠` glyph on warnings (`cli/banner.ts`,
+  unit-tested).
 
 ## Phase 1.5 — Trustworthy runs on real machines ✅ (this iteration)
 
@@ -403,11 +406,13 @@ one-off analysis into reusable, community-grade software.
     generically); bundle realistic test data so the test profile gives *real*
     results, not just a smoke test; and a fuller results interpretation from
     declared outputs.
-- 🔵 **Provenance for novelty.** Generated projects already separate what was reused
-  from what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading,
-  the custom local tools ("not from nf-core"); `modules.json` pins only the real
-  nf-core modules. Contributions are therefore honest about origin.
-  - ⬜ Remaining: a single novelty manifest summarizing reused-vs-new across a run.
+- ✅ **Provenance for novelty.** Generated projects separate what was reused from
+  what's new: `CITATIONS.md` lists nf-core tools and, under a distinct heading, the
+  custom local tools ("not from nf-core"); `modules.json` pins only the real nf-core
+  modules. Every composed project also gets a **`NOVELTY.md` manifest** summarizing
+  the reused nf-core modules (pinned to the commit SHA) vs the new custom tools,
+  with a one-line count — an honest, at-a-glance origin record
+  (`composition/novelty.ts`, unit-tested).
 
 ## Phase 6 — The zero-technical-knowledge co-scientist
 

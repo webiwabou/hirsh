@@ -17,7 +17,7 @@ A short design document and extension guide for future phases.
 src/
 ├── cli/              terminal REPL (I/O, commands /status /reset /help /exit)
 │   ├── index.ts      startup: config → registry → provider → env → conversation loop
-│   ├── banner.ts     ASCII DNA-helix logo, rounded welcome frame and tips
+│   ├── banner.ts     minimal one-line logo, rounded welcome frame and tips
 │   ├── terminalIO.ts AgentIO implementation over readline + chalk
 │   └── autonomousIO.ts  IO decorator for autonomous mode (auto-answers reversible confirms) (Phase 6)
 ├── config/           config loading and validation (YAML), API key from env var
@@ -67,6 +67,7 @@ src/
 │   ├── run.ts        real-run command builder for a composed pipeline (try-before-you-publish, Phase 5)
 │   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs + manifest patch for sharing (Phase 5)
 │   ├── contribution.ts  writes a local tool in nf-core/modules layout + nf-test for a PR (Phase 5)
+│   ├── novelty.ts    NOVELTY.md manifest — reused nf-core modules vs new custom tools (Phase 5)
 │   ├── inclusion.ts  nf-core inclusion guide + name check for adopting a pipeline (Phase 5)
 │   └── validate.ts   `nextflow config` + `-profile test -stub-run` + `nf-core lint` gate
 ├── results/
