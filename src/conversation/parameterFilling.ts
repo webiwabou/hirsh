@@ -78,13 +78,15 @@ export async function fillParameters(
   session.paramValues[pipeline.results.outdirParam] = outdir;
 
   // Data may already be in hand — e.g. downloaded from public accessions via
-  // fetchngs before Phase C. In that case there's a real samplesheet, so the
-  // test profile doesn't apply and we don't rebuild the samplesheet.
-  const dataReady =
+  // fetchngs before Phase C. A ready samplesheet (input set) means we don't
+  // rebuild it; either that or fetched FASTQ pairs mean the test profile doesn't
+  // apply (we have real data to run).
+  const haveSamplesheet =
     session.samplesheetPath !== undefined && session.paramValues.input !== undefined;
+  const haveFetchedData = haveSamplesheet || session.fetchedPairs !== undefined;
 
   // --- Test profile ---
-  if (pipeline.profiles.hasTestProfile && !dataReady) {
+  if (pipeline.profiles.hasTestProfile && !haveFetchedData) {
     io.info(
       "The test profile runs the pipeline with bundled test data and references: " +
         "ideal to validate the installation without real data or long runtimes.",
@@ -93,7 +95,7 @@ export async function fillParameters(
   }
 
   if (!session.useTestProfile) {
-    if (!dataReady) await buildSamplesheet(io, session, pipeline, runDir, suggestions);
+    if (!haveSamplesheet) await buildSamplesheet(io, session, pipeline, runDir, suggestions);
     await fillReferenceParams(io, session, pipeline, suggestions);
   }
 
@@ -191,13 +193,18 @@ async function buildSamplesheet(
   io.heading("Samplesheet construction");
   io.info(pipeline.samplesheet.description);
 
-  // Option 0 — reuse a samplesheet remembered from a past run.
-  if (await useRememberedSamplesheet(io, session, pipeline, suggestions)) return;
+  // FASTQ pairs downloaded from public accessions (fetchngs) that need re-shaping
+  // for this pipeline — build directly from them, skipping the file-source options.
+  const fetchedPairs = session.fetchedPairs;
 
-  // Option 1 — reuse and validate an existing samplesheet.
-  if (await useExistingSamplesheet(io, session, pipeline)) return;
+  if (!fetchedPairs) {
+    // Option 0 — reuse a samplesheet remembered from a past run.
+    if (await useRememberedSamplesheet(io, session, pipeline, suggestions)) return;
+    // Option 1 — reuse and validate an existing samplesheet.
+    if (await useExistingSamplesheet(io, session, pipeline)) return;
+  }
 
-  // Option 2 — build one from the user's files.
+  // Option 2 — build one from the user's files (or the fetched pairs).
   const isProtein = pipeline.name.includes("proteinfamilies");
   const isSarek = pipeline.name.includes("sarek");
   const header = pipeline.samplesheet.columns.map((c) => c.name);
@@ -213,11 +220,16 @@ async function buildSamplesheet(
     }
     for (const f of entries) rows.push({ sample: baseName(f), fasta: f });
   } else {
-    const dir = await io.ask(
-      "Directory with the FASTQ files (.fastq.gz / .fq.gz, or any folder of sequence files):",
-    );
-    const scan = await resolveFastqScan(io, dir, runDir);
-    const pairs = inferPairs(scan);
+    let pairs: FastqPair[];
+    if (fetchedPairs) {
+      io.info(`Using ${fetchedPairs.length} downloaded sample(s) from the public data.`);
+      pairs = fetchedPairs;
+    } else {
+      const dir = await io.ask(
+        "Directory with the FASTQ files (.fastq.gz / .fq.gz, or any folder of sequence files):",
+      );
+      pairs = inferPairs(await resolveFastqScan(io, dir, runDir));
+    }
     if (isSarek) {
       rows.push(...(await buildSarekRows(io, pairs)));
       for (const w of checkSomaticDesign(rows)) io.warn(w);

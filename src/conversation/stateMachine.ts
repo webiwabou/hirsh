@@ -58,7 +58,11 @@ import {
   renderIdsFile,
   type Accession,
 } from "../execution/fetchngs.js";
-import { validateSamplesheetContent } from "../execution/samplesheet.js";
+import {
+  fastqPairsFromSamplesheet,
+  validateSamplesheetContent,
+  type FastqPair,
+} from "../execution/samplesheet.js";
 import {
   buildFollowUpCommand,
   isRunnableFollowUp,
@@ -425,7 +429,33 @@ export class Agent {
       return;
     }
 
-    if (!this.applyFetchedSamplesheet(session, pipeline, outdir, accessions)) return;
+    if (tag) {
+      // fetchngs emitted a samplesheet already shaped for this pipeline.
+      if (!this.applyFetchedSamplesheet(session, pipeline, outdir, accessions)) return;
+    } else {
+      // fetchngs can't format for this pipeline (e.g. sarek's tumor/normal shape).
+      // Re-shape: pull the FASTQ pairs from the generic samplesheet and let Phase C
+      // build the proper one, asking the pipeline-specific columns.
+      const samplesheet = fetchngsSamplesheetPath(outdir);
+      let pairs: FastqPair[];
+      try {
+        pairs = fastqPairsFromSamplesheet(readFileSync(samplesheet, "utf8"));
+      } catch {
+        pairs = [];
+      }
+      if (pairs.length === 0) {
+        this.io.warn(
+          `Downloaded the data but couldn't read the FASTQ list from ${samplesheet}; ` +
+            "I'll ask for files during parameterization instead.",
+        );
+        return;
+      }
+      session.fetchedPairs = pairs;
+      this.io.say(
+        `Downloaded ${accessions.length} accession(s) → ${pairs.length} sample(s). I'll build the ` +
+          `${pipeline.name} samplesheet from them, asking any extra details it needs.`,
+      );
+    }
   }
 
   /**

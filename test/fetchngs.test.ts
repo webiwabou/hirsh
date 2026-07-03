@@ -7,6 +7,7 @@ import {
   FETCHNGS_REVISION,
   renderIdsFile,
 } from "../src/execution/fetchngs.js";
+import { fastqPairsFromSamplesheet } from "../src/execution/samplesheet.js";
 
 describe("detectAccessions", () => {
   it("detects and classifies SRA/GEO/BioProject ids", () => {
@@ -95,5 +96,25 @@ describe("buildFetchngsCommand", () => {
 describe("fetchngsSamplesheetPath", () => {
   it("points at the samplesheet fetchngs emits", () => {
     expect(fetchngsSamplesheetPath("/run/fetchngs")).toBe("/run/fetchngs/samplesheet/samplesheet.csv");
+  });
+});
+
+describe("fastqPairsFromSamplesheet", () => {
+  it("extracts sample + fastq pairs from a fetched samplesheet (re-shape for sarek)", () => {
+    const csv = [
+      "sample,fastq_1,fastq_2,strandedness",
+      "SRR100,/d/SRR100_1.fastq.gz,/d/SRR100_2.fastq.gz,auto",
+      "SRR101,/d/SRR101_1.fastq.gz,,auto", // single-end
+    ].join("\n");
+    const pairs = fastqPairsFromSamplesheet(csv);
+    expect(pairs).toEqual([
+      { sample: "SRR100", fastq_1: "/d/SRR100_1.fastq.gz", fastq_2: "/d/SRR100_2.fastq.gz" },
+      { sample: "SRR101", fastq_1: "/d/SRR101_1.fastq.gz", fastq_2: undefined },
+    ]);
+  });
+
+  it("returns [] when there's no fastq_1 column or no rows", () => {
+    expect(fastqPairsFromSamplesheet("sample,other\nx,y")).toEqual([]);
+    expect(fastqPairsFromSamplesheet("sample,fastq_1")).toEqual([]);
   });
 });

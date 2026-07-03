@@ -49,6 +49,32 @@ export function scanFastqs(dir: string): ScanResult {
 }
 
 /**
+ * Extracts FASTQ pairs from a samplesheet CSV (its sample/fastq_1/fastq_2
+ * columns). Used to re-shape a fetched (nf-core/fetchngs) samplesheet into a
+ * pipeline whose format fetchngs can't emit directly (e.g. sarek tumor/normal),
+ * by feeding these pairs back into that pipeline's row builder. Pure.
+ */
+export function fastqPairsFromSamplesheet(text: string): FastqPair[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const header = lines[0].split(",").map((h) => h.trim());
+  const iSample = header.indexOf("sample");
+  const i1 = header.indexOf("fastq_1");
+  const i2 = header.indexOf("fastq_2");
+  if (i1 === -1) return [];
+  const pairs: FastqPair[] = [];
+  for (let r = 1; r < lines.length; r++) {
+    const cells = lines[r].split(",");
+    const fastq_1 = (cells[i1] ?? "").trim();
+    if (!fastq_1) continue;
+    const sample = (iSample >= 0 ? (cells[iSample] ?? "").trim() : "") || `sample_${r}`;
+    const fastq_2 = i2 >= 0 ? (cells[i2] ?? "").trim() : "";
+    pairs.push({ sample, fastq_1, fastq_2: fastq_2 || undefined });
+  }
+  return pairs;
+}
+
+/**
  * Infers pairs/samples from file names. Files whose name does not match the
  * convention are treated as single-end (fastq_1 only).
  */

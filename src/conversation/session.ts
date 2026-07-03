@@ -2,6 +2,7 @@
 import type { PipelineDefinition } from "../pipelines/types.js";
 import type { ContainerEngine } from "../config/types.js";
 import type { ExecutorSettings } from "../execution/executor.js";
+import type { FastqPair } from "../execution/samplesheet.js";
 import type { DesignReview } from "./designReview.js";
 
 export type Phase =
@@ -45,6 +46,12 @@ export interface Session {
   useTestProfile: boolean;
   /** Path to the generated samplesheet, if any. */
   samplesheetPath?: string;
+  /**
+   * FASTQ pairs downloaded from public accessions when fetchngs couldn't emit a
+   * samplesheet in the target pipeline's shape (e.g. sarek). Phase C builds the
+   * proper samplesheet from these, asking the pipeline-specific columns.
+   */
+  fetchedPairs?: FastqPair[];
   /** Final `nextflow run ...` command as an argument list. */
   command?: string[];
   /** Resolved output directory. */
