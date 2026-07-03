@@ -30,6 +30,7 @@ src/
 ├── pipelines/        pipeline registry
 │   ├── types.ts      PipelineDefinition schema
 │   ├── registry.ts   loads the YAML files in definitions/ (with cache + validation)
+│   ├── schemaCheck.ts  validates a definition's params/enum defaults against the upstream schema (verify:defs)
 │   └── definitions/  one YAML per pipeline (rnaseq, sarek, proteinfamilies)
 ├── conversation/     state machine (Phases A–E)
 │   ├── session.ts    in-memory state + Reset/Exit signals
