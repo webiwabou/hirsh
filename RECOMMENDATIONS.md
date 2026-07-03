@@ -122,7 +122,14 @@ Make every supported pipeline safe to run for real and make its output land as
   (`scripts/verify-definitions.mjs`) fetches each pinned pipeline's real
   `nextflow_schema.json` and confirms the revision tag exists and every declared
   param is a real upstream parameter. All three currently pass.
-  - ⬜ Remaining: also diff default values, and run it in CI (network permitting).
+  - ⬜ Remaining: also **validate default values** against the upstream schema (a
+    real gap — a wrong enum default like proteinfamilies' `clustering_tool: mmseqs`
+    slipped through because only param *existence* was checked), and run it in CI.
+- ✅ **Self-correcting runs.** When a run fails nf-core's parameter validation
+  ("Expected any of [...]"), Hirsh parses the error, shows the offending
+  parameter(s) and their allowed values, and offers to fix each to a valid value
+  (via the menu) and run again — once, so a persistent error can't loop — instead
+  of blindly re-running the same command (`execution/nextflowErrors.ts`, unit-tested).
 - ✅ **Richer, quantitative interpretation.** Phase E now reads the numbers that
   matter — per-sample library sizes/column totals from count matrices, per-sample
   metrics from MultiQC's `multiqc_general_stats.txt`, and variant counts from VCFs
