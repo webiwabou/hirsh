@@ -229,6 +229,8 @@ HTML reports (open them in your browser):
   infers R1/R2 pairs from a FASTQ directory, asks per-sample tumor/normal +
   patient for sarek somatic runs (and per-sample strandedness for rnaseq),
   validates an existing samplesheet you point it at, or uses the one just fetched.
+  If the folder's files don't have `.fastq/.fq` extensions, it recognizes FASTQ
+  **by content** and offers to symlink them to canonical names (see below).
 - **D · Confirmation and execution** — checks whether the machine can meet the
   pipeline's resource needs (adapting the caps or advising against the run),
   shows the full command and `params.yaml`, and only runs after your explicit
@@ -280,6 +282,21 @@ defaults to Singularity+Slurm, with no re-picking each session.
 
 It's on by default and stays on your machine; disable it with
 `memory.enabled: false`.
+
+## Building the samplesheet from a folder
+
+Point Hirsh at a directory of FASTQ files and it builds the samplesheet for you —
+inferring R1/R2 pairs and sample names by convention. If those files **don't have
+`.fastq/.fq` extensions** (e.g. sequences saved as `.txt`, or oddly named), it
+falls back to recognizing them **by content**: it sniffs each file's bytes for a
+FASTQ record, a FASTA header, or gzip, and offers to symlink the recognized files
+to canonical `.fastq(.gz)` names so the pipeline accepts them — it links, it never
+rewrites your data.
+
+> **Limits (by design).** It recognizes plain or gzipped FASTQ/FASTA only. Aligned
+> or binary formats (BAM, CRAM, fast5) are detected and reported as unsupported —
+> convert them to FASTQ first (e.g. `samtools fastq input.bam`) — rather than
+> silently skipped. Sample grouping still follows the filename convention.
 
 ## Public data from accessions
 

@@ -92,17 +92,21 @@ Make every supported pipeline safe to run for real and make its output land as
   users can point at an existing samplesheet, which is validated against the
   pipeline's column spec (`validateSamplesheetContent`, unit-tested).
   - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
-  - ⬜ **Content-based ingestion (extension-agnostic).** Today the folder scanner
-    keys off file extensions (`.fastq/.fq[.gz]`), so sequences in a `.txt` (or any
-    non-standard name) are invisible. Planned: sniff file *content* — gzip magic
-    bytes, a FASTQ record (`@`/`+` lines) or FASTA (`>` header) — to recognize
-    sequence files regardless of extension, then offer to build the samplesheet
-    (and optionally symlink to a canonical `.fastq.gz` name so Nextflow's own
-    checks pass). **Realistic limits:** it recognizes plain-text/gzipped FASTQ/
-    FASTA only; it will *not* transparently convert binary/aligned formats
-    (BAM/CRAM/SRA/fast5/pod5 — those need a conversion step), demultiplex, or
-    invent sample grouping beyond the filename convention (ambiguous R1/R2 still
-    asks). It points at and normalizes files; it never rewrites sequence data.
+  - ✅ **Content-based ingestion (extension-agnostic).** When a FASTQ folder has no
+    `.fastq/.fq` files, Phase C sniffs file *content* — gzip magic bytes
+    (decompressing just the head), a FASTQ record (`@` with a `+` line, told apart
+    from SAM) or FASTA (`>`) — to recognize sequence files regardless of extension,
+    and offers to **symlink them to canonical `.fastq(.gz)`/`.fasta(.gz)` names** so
+    the pipeline (and its own name checks) accept them, then reuses the normal pair
+    inference (`classifySequenceText`/`detectBinaryMagic`/`canonicalSequenceName`
+    pure + `scanSequenceDir`/`linkCanonicalSequences`, unit-tested). **Honest
+    limits (enforced):** it recognizes plain-text/gzipped FASTQ/FASTA only;
+    aligned/binary formats (BAM/CRAM/HDF5-fast5) are detected by magic bytes and
+    reported as unsupported ("convert to FASTQ first") rather than silently
+    ignored; it links, never rewriting sequence data; grouping still follows the
+    filename convention (ambiguous R1/R2 still asks).
+    - ⬜ Remaining: the same content fallback for the protein-FASTA branch, and
+      recognizing more binary formats (SRA/pod5) by magic bytes.
 - ✅ **Schema-validated LLM outputs** with one self-correcting retry. Tool-call
   arguments (intent, pipeline selection, composition planning) are validated with
   Zod via `llm/structured.ts`; on a missing/invalid call the model is re-prompted

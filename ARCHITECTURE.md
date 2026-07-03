@@ -50,7 +50,7 @@ src/
 │   ├── git.ts        git init + initial commit for a generated project (Phase 5)
 │   ├── publish.ts    assisted GitHub publishing via `gh` (opt-in, private by default) (Phase 5)
 │   ├── resources.ts  machine detection + whole-pipeline and per-process memory assessment (ok/adapt/refuse)
-│   ├── samplesheet.ts  FASTQ scanning, pair inference, CSV writing
+│   ├── samplesheet.ts  FASTQ scanning (by extension and by content), pair inference, canonical-name symlinks, CSV writing
 │   └── runner.ts     spawns `nextflow`, streams stdout/stderr, forwards SIGINT
 ├── modules/          live nf-core/modules registry (Phase F4)
 │   ├── types.ts      NfCoreModule model + channel helpers
@@ -177,6 +177,14 @@ No other module depends on the concrete provider.
   emitted samplesheet against the pipeline's columns and sets it on the session.
   `parameterFilling.ts` then skips manual samplesheet construction (the `dataReady`
   guard). Every failure mode falls back to normal local-file parameterization.
+- **Content-based ingestion.** `parameterFilling.ts::resolveFastqScan` prefers the
+  fast extension-based `scanFastqs`; when a folder has no `.fastq/.fq` files it
+  falls back to `samplesheet.ts::scanSequenceDir`, which sniffs each file's bytes
+  (`classifySequenceText` for FASTQ/FASTA, `detectBinaryMagic` for BAM/CRAM/fast5,
+  gzip head-decompression) and then offers `linkCanonicalSequences` to symlink the
+  recognized files to canonical names so the existing pair inference and the
+  pipeline's own checks work. The sniff/name helpers are pure and unit-tested;
+  unsupported binary formats are reported, not silently ignored.
 - **Execution via `-params-file`.** `parameterFilling.ts` writes a reviewable
   `params.yaml` and the command references it, instead of a long CLI. Booleans and
   resource caps flow through cleanly, and there is no shell (params never touch a
