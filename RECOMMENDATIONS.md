@@ -125,9 +125,10 @@ Make every supported pipeline safe to run for real and make its output land as
   against the upstream schema — so a wrong default like proteinfamilies'
   `clustering_tool: mmseqs` is caught, not shipped (the pure check lives in
   `pipelines/schemaCheck.ts`, unit-tested; the script runs via `tsx`). Verified
-  live: all three pass.
-  - ⬜ Remaining: diff non-enum default *values* too (informational), and run it in
-    CI (network permitting).
+  live: all three pass. It runs in **CI on a weekly schedule** (plus manual
+  dispatch) — off the per-PR checks since it needs network to fetch upstream
+  schemas (`.github/workflows/verify-defs.yml`).
+  - ⬜ Remaining: diff non-enum default *values* too (informational).
 - ✅ **Self-correcting runs.** When a run fails nf-core's parameter validation
   ("Expected any of [...]"), Hirsh parses the error, shows the offending
   parameter(s) and their allowed values, and offers to fix each to a valid value
