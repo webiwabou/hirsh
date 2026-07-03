@@ -212,6 +212,26 @@ export function countDifferential(
   };
 }
 
+/**
+ * Extracts the distinct container images from an nf-core execution trace
+ * (`pipeline_info/execution_trace_*.txt`, a TSV with a `container` column), for
+ * byte-exact reproducibility provenance. Digest-pinned where Nextflow resolved
+ * one; excludes empty/"-" cells (e.g. conda tasks). Pure; returns sorted distinct.
+ */
+export function parseTraceContainers(traceText: string): string[] {
+  const lines = traceText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const header = lines[0].split("\t").map((h) => h.trim());
+  const idx = header.indexOf("container");
+  if (idx === -1) return [];
+  const seen = new Set<string>();
+  for (let i = 1; i < lines.length; i++) {
+    const cell = (lines[i].split("\t")[idx] ?? "").trim();
+    if (cell && cell !== "-" && cell.toLowerCase() !== "null") seen.add(cell);
+  }
+  return [...seen].sort();
+}
+
 /** Counts variant records in VCF text (lines that are not headers/empty). */
 export function countVcfRecords(text: string): number {
   let n = 0;

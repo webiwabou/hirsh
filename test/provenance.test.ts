@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { buildManifest, renderProvenanceMarkdown, type ManifestInput } from "../src/execution/provenance.js";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  buildManifest,
+  readRunContainers,
+  renderProvenanceMarkdown,
+  type ManifestInput,
+} from "../src/execution/provenance.js";
+import { parseTraceContainers } from "../src/results/parsers.js";
 
 const input: ManifestInput = {
   pipelineName: "nf-core/rnaseq",
@@ -51,5 +60,58 @@ describe("renderProvenanceMarkdown", () => {
   it("reflects a prepared-but-not-run state", () => {
     const md2 = renderProvenanceMarkdown(buildManifest({ ...input, executed: false, exitCode: undefined }));
     expect(md2).toContain("prepared but not executed");
+  });
+
+  it("lists container images when captured, and says none otherwise", () => {
+    const withImgs = renderProvenanceMarkdown(
+      buildManifest({ ...input, containers: ["quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0"] }),
+    );
+    expect(withImgs).toContain("## Container images");
+    expect(withImgs).toContain("quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0");
+    expect(renderProvenanceMarkdown(buildManifest(input))).toContain("none recorded");
+  });
+});
+
+describe("parseTraceContainers", () => {
+  const trace = [
+    "task_id\thash\tname\tstatus\tcontainer",
+    "1\tab/cd\tFASTQC (s1)\tCOMPLETED\tquay.io/biocontainers/fastqc:0.12.1--hdfd78af_0",
+    "2\tef/gh\tFASTP (s1)\tCOMPLETED\tquay.io/biocontainers/fastp:0.23.4--h5f740d0_0",
+    "3\tij/kl\tFASTQC (s2)\tCOMPLETED\tquay.io/biocontainers/fastqc:0.12.1--hdfd78af_0", // dup
+    "4\tmn/op\tCUSTOM\tCOMPLETED\t-", // conda / no container
+  ].join("\n");
+
+  it("returns distinct container images from the trace, excluding '-'", () => {
+    expect(parseTraceContainers(trace)).toEqual([
+      "quay.io/biocontainers/fastp:0.23.4--h5f740d0_0",
+      "quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0",
+    ]);
+  });
+
+  it("returns [] when there is no container column", () => {
+    expect(parseTraceContainers("task_id\tstatus\n1\tCOMPLETED")).toEqual([]);
+  });
+});
+
+describe("readRunContainers", () => {
+  let outdir: string;
+  beforeAll(() => {
+    outdir = mkdtempSync(join(tmpdir(), "hirsh-prov-"));
+    mkdirSync(join(outdir, "pipeline_info"), { recursive: true });
+    // An older and a newer trace; the newest (by name) should win.
+    writeFileSync(
+      join(outdir, "pipeline_info", "execution_trace_2026-07-01_00-00-00.txt"),
+      "task_id\tcontainer\n1\told/image:1",
+    );
+    writeFileSync(
+      join(outdir, "pipeline_info", "execution_trace_2026-07-02_00-00-00.txt"),
+      "task_id\tcontainer\n1\tnew/image:2",
+    );
+  });
+  afterAll(() => rmSync(outdir, { recursive: true, force: true }));
+
+  it("reads containers from the most recent trace, [] when absent", () => {
+    expect(readRunContainers(outdir)).toEqual(["new/image:2"]);
+    expect(readRunContainers(join(outdir, "nope"))).toEqual([]);
   });
 });

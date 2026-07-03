@@ -7,9 +7,10 @@
  * done. Building/rendering are pure (data in, strings out) for testing; only
  * writeProvenance touches disk.
  */
-import { writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { QueryContext } from "../conversation/session.js";
+import { parseTraceContainers } from "../results/parsers.js";
 import type { MachineResources } from "./resources.js";
 
 export interface RunManifest {
@@ -31,6 +32,8 @@ export interface RunManifest {
     arch: string;
     cpus: number;
     memoryGB: number;
+    /** Container images Nextflow actually used, from the execution trace. */
+    containers?: string[];
   };
   llm: string;
   execution: { executed: boolean; exitCode?: number };
@@ -54,8 +57,33 @@ export interface ManifestInput {
   llmLabel: string;
   executed: boolean;
   exitCode?: number;
+  /** Container images used (from the Nextflow execution trace), when available. */
+  containers?: string[];
   /** Defaults to now; injectable for deterministic tests. */
   createdAt?: string;
+}
+
+/**
+ * Reads the container images Nextflow actually used from the most recent nf-core
+ * execution trace under `<outdir>/pipeline_info/`. Returns [] when there's no
+ * trace (e.g. a prepared-but-not-run command, or a conda run). Best-effort.
+ */
+export function readRunContainers(outdir: string): string[] {
+  const dir = join(outdir, "pipeline_info");
+  let files: string[];
+  try {
+    if (!existsSync(dir)) return [];
+    files = readdirSync(dir).filter((f) => /execution_trace.*\.txt$/i.test(f)).sort();
+  } catch {
+    return [];
+  }
+  if (files.length === 0) return [];
+  try {
+    // The trace filenames carry a timestamp, so the last one is the newest.
+    return parseTraceContainers(readFileSync(join(dir, files[files.length - 1]), "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 export function buildManifest(input: ManifestInput): RunManifest {
@@ -77,6 +105,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
       arch: process.arch,
       cpus: input.machine.cpus,
       memoryGB: input.machine.memoryGB,
+      containers: input.containers && input.containers.length > 0 ? input.containers : undefined,
     },
     llm: input.llmLabel,
     execution: { executed: input.executed, exitCode: input.exitCode },
@@ -124,6 +153,14 @@ ${paramLines || "- (none)"}
 - **Executor:** ${m.environment.executor}
 - **Machine:** ${m.environment.cpus} CPUs, ${m.environment.memoryGB} GB RAM, ${m.environment.os}/${m.environment.arch}
 - **LLM:** ${m.llm}
+
+## Container images
+${
+  m.environment.containers && m.environment.containers.length > 0
+    ? "Images Nextflow used (digest-pinned where it resolved one), for byte-exact reproduction:\n\n" +
+      m.environment.containers.map((c) => `- \`${c}\``).join("\n")
+    : "- (none recorded — a conda/mamba run, or no execution trace was found)"
+}
 
 ## Reproduce
 From the run directory, re-running the command above reproduces this analysis

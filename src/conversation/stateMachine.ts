@@ -75,7 +75,7 @@ import {
   parseMemoryToGB,
   type MachineResources,
 } from "../execution/resources.js";
-import { buildManifest, writeProvenance } from "../execution/provenance.js";
+import { buildManifest, readRunContainers, writeProvenance } from "../execution/provenance.js";
 import type { EnvReport } from "../execution/envCheck.js";
 import { findHtmlReports, gatherResults, summarizeResults } from "../results/interpreter.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
@@ -1503,6 +1503,9 @@ export class Agent {
         executor: session.executor ? describeExecutor(session.executor) : "local machine",
         machine: detectMachine(),
         llmLabel: this.provider.label,
+        // Container images Nextflow resolved (from its execution trace), for
+        // byte-exact reproducibility. Empty for prepared/conda runs.
+        containers: executed && session.outdir ? readRunContainers(session.outdir) : undefined,
         executed,
         exitCode,
       });
