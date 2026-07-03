@@ -89,7 +89,9 @@ import {
   gatherResults,
   summarizeResults,
   type InterpretablePipeline,
+  type ResultsReport,
 } from "../results/interpreter.js";
+import { renderBarChart } from "../results/charts.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
@@ -964,12 +966,22 @@ export class Agent {
       this.io.info(`Results are in ${outdir}.`);
       return;
     }
+    this.showCharts(report);
     this.io.say("\nResults summary:\n");
     await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
     this.io.endStream();
     if (report.htmlReports.length > 0) {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
+  }
+
+  /** Renders any small inline bar charts of the run's key numbers to the terminal. */
+  private showCharts(report: ResultsReport): void {
+    for (const chart of report.charts ?? []) {
+      if (chart.items.length === 0) continue;
+      this.io.say("\n" + chart.title + ":");
+      for (const line of renderBarChart(chart.items)) this.io.info("  " + line);
     }
   }
 
@@ -1966,6 +1978,7 @@ export class Agent {
       .filter((o) => o.severity !== "info")
       .map((o) => `[${o.topic}] ${o.message}`);
 
+    this.showCharts(report);
     this.io.say("Results summary:\n");
     await summarizeResults(
       this.provider,
@@ -2230,6 +2243,7 @@ export class Agent {
       .filter((o) => o.severity !== "info")
       .map((o) => `[${o.topic}] ${o.message}`);
 
+    this.showCharts(report);
     this.io.say("\nFollow-up results summary:\n");
     await summarizeResults(
       this.provider,

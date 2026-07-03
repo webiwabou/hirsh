@@ -14,6 +14,7 @@ import type { LLMProvider, ChatMessage } from "../llm/index.js";
 import type { ResultOutput } from "../pipelines/types.js";
 import type { QueryContext } from "../conversation/session.js";
 import { countDifferential, countVcfRecords, parseGeneralStats, summarizeTable } from "./parsers.js";
+import type { ChartData } from "./charts.js";
 
 /**
  * The minimal shape the interpreter needs. A full PipelineDefinition satisfies
@@ -39,6 +40,8 @@ export interface ResultsReport {
   outputs: GatheredOutput[];
   /** Paths of HTML reports for the user to open. */
   htmlReports: string[];
+  /** Small inline charts of the key numbers, for the terminal. */
+  charts?: ChartData[];
 }
 
 const MAX_READ_BYTES = 60_000_000;
@@ -57,11 +60,13 @@ function fmt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function describeTable(path: string): string {
+/** Describes a count/TPM-style table and, when it has per-column totals, a chart. */
+function describeTable(path: string, label: string): { detail: string; chart?: ChartData } {
   const text = readTextMaybeGzip(path);
-  if (text === null) return "table present (too large to summarize inline).";
+  if (text === null) return { detail: "table present (too large to summarize inline)." };
   const s = summarizeTable(text);
   const parts = [`${fmt(s.rows)} rows x ${s.cols} columns.`];
+  let chart: ChartData | undefined;
   if (s.numericColumns.length > 0) {
     const sizes = s.numericColumns
       .slice(0, 6)
@@ -72,8 +77,14 @@ function describeTable(path: string): string {
         s.numericColumns.length > 6 ? ", …" : ""
       }.`,
     );
+    if (s.numericColumns.length >= 2) {
+      chart = {
+        title: `${label} — per-column totals`,
+        items: s.numericColumns.slice(0, 12).map((c) => ({ label: c, value: s.columnSums[c] ?? 0 })),
+      };
+    }
   }
-  return parts.join(" ");
+  return { detail: parts.join(" "), chart };
 }
 
 /** Finds the MultiQC general-stats table sitting next to a MultiQC report. */
@@ -156,9 +167,10 @@ export function findHtmlReports(root: string, cap = 5): string[] {
  * concrete numbers: how many genes were significant (and up/down) per contrast.
  * Falls back to a plain directory listing when no differential tables are found.
  */
-function describeDiffDir(path: string): string {
+function describeDiffDir(path: string, label: string): { detail: string; chart?: ChartData } {
   const files = walkFiles(path, (e) => /\.(tsv|csv|txt)(\.gz)?$/i.test(e), 60, 4);
   const lines: string[] = [];
+  const items: ChartData["items"] = [];
   let contrasts = 0;
   let totalSig = 0;
   for (const file of files) {
@@ -168,20 +180,23 @@ function describeDiffDir(path: string): string {
     if (!d.padjColumn) continue; // not a differential table
     contrasts++;
     totalSig += d.significant;
+    items.push({ label: basename(file).replace(/\.(tsv|csv|txt)(\.gz)?$/i, ""), value: d.significant });
     const thresh = `padj<${d.alpha}${d.lfcColumn ? `, |log2FC|>${d.lfcThreshold}` : ""}`;
     lines.push(
       `${basename(file)}: ${fmt(d.significant)} of ${fmt(d.tested)} tested genes significant (${thresh})` +
         (d.lfcColumn ? ` — ${fmt(d.up)} up, ${fmt(d.down)} down` : ""),
     );
   }
-  if (contrasts === 0) return describeDirectory(path);
-  return [
+  if (contrasts === 0) return { detail: describeDirectory(path) };
+  const detail = [
     `${contrasts} contrast(s), ${fmt(totalSig)} significant gene(s) total.`,
     ...lines.slice(0, 8).map((l) => "    " + l),
     lines.length > 8 ? "    …" : "",
   ]
     .filter(Boolean)
     .join("\n  ");
+  const chart = items.length >= 2 ? { title: `${label} — significant genes per contrast`, items } : undefined;
+  return { detail, chart };
 }
 
 function describeVcfDir(path: string): string {
@@ -235,6 +250,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
   const absOut = resolve(outdir);
   const outputs: GatheredOutput[] = [];
   const htmlReports: string[] = [];
+  const charts: ChartData[] = [];
 
   for (const out of pipeline.results.outputs) {
     const absPath = join(absOut, out.path);
@@ -245,11 +261,15 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
         detail = describeMultiqc(absPath);
         htmlReports.push(absPath);
       } else if (out.kind === "table") {
-        detail = describeTable(absPath);
+        const r = describeTable(absPath, out.path);
+        detail = r.detail;
+        if (r.chart) charts.push(r.chart);
       } else if (out.kind === "vcf_dir") {
         detail = describeVcfDir(absPath);
       } else if (out.kind === "de_table_dir") {
-        detail = describeDiffDir(absPath);
+        const r = describeDiffDir(absPath, out.path);
+        detail = r.detail;
+        if (r.chart) charts.push(r.chart);
       } else if (safeIsDir(absPath)) {
         detail = describeDirectory(absPath);
       } else {
@@ -259,7 +279,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
     outputs.push({ output: out, absPath, found, detail });
   }
 
-  return { outdir: absOut, outputs, htmlReports };
+  return { outdir: absOut, outputs, htmlReports, charts };
 }
 
 /** Generates the plain-language results summary using the LLM. */
