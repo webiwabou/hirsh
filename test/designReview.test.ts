@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  designReviewApplies,
   reviewDesign,
   sortedObservations,
   worstSeverity,
@@ -42,6 +43,24 @@ describe("sortedObservations", () => {
       { severity: "caution", topic: "c", message: "m" },
     ]);
     expect(sortedObservations(r).map((o) => o.severity)).toEqual(["risk", "caution", "info"]);
+  });
+});
+
+describe("designReviewApplies", () => {
+  it("does NOT apply to single-sample / observational / structural tasks", () => {
+    expect(designReviewApplies({ objective: "graph representation of a single protein sequence", dataType: "protein" })).toBe(false);
+    expect(designReviewApplies({ objective: "purely observational look at the structure of hemoglobin" })).toBe(false);
+    expect(designReviewApplies({ objective: "visualize one protein", dataType: "protein" })).toBe(false);
+  });
+
+  it("DOES apply when groups/conditions are compared", () => {
+    expect(designReviewApplies({ objective: "DEGs", experimentalDesign: "treated vs control, n=2" })).toBe(true);
+    expect(designReviewApplies({ objective: "differential expression between conditions" })).toBe(true);
+    expect(designReviewApplies({ objective: "tumor/normal somatic variants" })).toBe(true);
+  });
+
+  it("applies when there's nothing to go on (let the review look)", () => {
+    expect(designReviewApplies({})).toBe(true);
   });
 });
 

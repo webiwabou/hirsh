@@ -99,6 +99,30 @@ export function sortedObservations(review: DesignReview): DesignObservation[] {
   return [...review.observations].sort((a, b) => ORDER[a.severity] - ORDER[b.severity]);
 }
 
+const COMPARISON_RE =
+  /\b(vs\.?|versus|compare|comparison|differential|between|conditions?|treatments?|controls?|replicates?|groups?|case[- ]?control|cohort|tumou?r|normal|knock[- ]?out|wild[- ]?type|time[- ]?points?|doses?|paired|unpaired|replication)\b/i;
+
+const OBSERVATIONAL_RE =
+  /\b(observational|descriptive|single (sequence|protein|sample|genome|cell|isolate)|one (sequence|protein|sample)|a single|structure of|visuali[sz]e|graph representation)\b/i;
+
+/**
+ * Whether an experimental-design review meaningfully applies. It does NOT for a
+ * single-sample, descriptive/observational, or structural task with no comparison
+ * — there is no design (replication/controls/batch) to critique there, and forcing
+ * that framing produces absurd "add controls and replication" advice. Conservative:
+ * only skips when the request clearly reads as observational/single with no
+ * comparison signal; otherwise the review still runs. Pure.
+ */
+export function designReviewApplies(query: QueryContext): boolean {
+  const text = [query.objective, query.experimentalDesign, query.dataType]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (text.trim() === "") return true; // nothing to go on → let the review look
+  if (COMPARISON_RE.test(text)) return true; // groups/conditions → design matters
+  return !OBSERVATIONAL_RE.test(text); // observational/single → skip
+}
+
 function intentText(query: QueryContext): string {
   return [
     `Organism: ${query.organism ?? "(unknown)"}`,
@@ -127,6 +151,12 @@ export async function reviewDesign(
         "groups, pseudoreplication, and whether the planned analysis suits the objective.",
         "Be concise and constructive. If the design looks sound, return few or no observations",
         "and say so in the summary. Do NOT invent details that weren't provided.",
+        "CRITICAL: replication, controls and batch effects only apply when GROUPS or CONDITIONS",
+        "are being COMPARED. If the task is descriptive/observational, a single sample/sequence,",
+        "or a structural analysis with no comparison, there is NO experimental design to critique —",
+        "return an empty observations list and say plainly in the summary that this is a descriptive",
+        "analysis with no design concerns. Never tell a user to 'add controls/replication' to a",
+        "single-sample or observational task.",
         "Respond by calling report_design_review.",
       ].join(" "),
     },

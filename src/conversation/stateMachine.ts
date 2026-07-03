@@ -99,7 +99,7 @@ import { initAndCommit, isGitAvailable } from "../execution/git.js";
 import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
-import { reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
+import { designReviewApplies, reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
 import { classifyPathAnswer } from "./pathInput.js";
 import { selectPipeline } from "./pipelineSelection.js";
 import type { AgentIO } from "./io.js";
@@ -238,6 +238,17 @@ export class Agent {
     const q = session.query;
     if (!q.objective && !q.experimentalDesign) return true;
 
+    // Skip the design review for descriptive/observational or single-sample tasks:
+    // there's no experimental design (replication/controls/batch) to critique, and
+    // forcing it produces absurd advice.
+    if (!designReviewApplies(q)) {
+      this.io.info(
+        "This looks like a descriptive/single-sample analysis, so there's no experimental " +
+          "design to review — moving on to the pipeline.",
+      );
+      return true;
+    }
+
     const review = await this.io.withSpinner("Reviewing the experimental design", () =>
       reviewDesign(this.provider, q),
     );
@@ -276,6 +287,7 @@ export class Agent {
     // The user can accept, decline, or answer in natural language ("actually
     // it's paired-end WGS") — in which case we fold that back into the intent and
     // reconsider, rather than forcing a bare yes/no.
+    let rejected: string | null = null;
     for (let round = 0; round < 4; round++) {
       const sel = await this.io.withSpinner("Choosing the right pipeline", () =>
         selectPipeline(this.provider, this.registry, session.query),
@@ -285,8 +297,14 @@ export class Agent {
         ? this.registry.find((p) => p.name === sel.pipelineName) ?? null
         : null;
 
-      if (!chosen) {
-        this.io.warn("I couldn't find a curated pipeline that fits your case well: " + sel.rationale);
+      // If reconsidering just lands back on the pipeline the user explicitly
+      // pushed back on, don't re-suggest it — that means none really fits.
+      if (!chosen || (rejected && chosen.name === rejected)) {
+        this.io.warn(
+          chosen
+            ? `None of the curated pipelines really fit — ${chosen.name} is only a loose match for what you described.`
+            : "I couldn't find a curated pipeline that fits your case well: " + sel.rationale,
+        );
         const compose = await this.io.confirm(
           "Would you like me to compose one from nf-core modules instead?",
           true,
@@ -310,7 +328,9 @@ export class Agent {
         return this.pickManually(session);
       }
 
-      // Free-text answer → treat as a clarification and re-decide.
+      // Free-text answer → the user is pushing back on this suggestion. Remember
+      // it so we don't just re-suggest the same pipeline, and re-decide.
+      rejected = chosen.name;
       session.transcript.push({ role: "user", text: resp.text });
       const refined = await this.io.withSpinner("Reconsidering based on that", () =>
         extractIntent(this.provider, this.registry, session.transcript),
