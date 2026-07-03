@@ -56,13 +56,18 @@ parameterize → confirm → run → interpret.
     kinds, patterns) so someone who has never used Nextflow can add their own tool;
     output kinds are sanitized so a stray answer can't produce a broken file
     pattern. `@` path references work at file prompts too.
-  - ✅ **Slash-command affordance.** Typing `/` then Tab completes among
-    `/help /status /reset /exit`, and a bare `/` lists them (Claude-Code-style).
-  - ⬜ Remaining: apply the recommended-options prompt to the remaining selections
-    (execution backend/executor, LLM-proposed gap tools); a fuller inline command
-    dropdown (today it's Tab-completion); reduce redundant intent questions; and
-    fuller free-form redirection everywhere (treat any prompt's answer as a possible
-    new instruction/question and re-plan, closer to a coding agent).
+  - ✅ **Interactive selection.** In a rich terminal the recommended-options prompt
+    is an **arrow-key menu** (`@inquirer/prompts`) — each option with its
+    description and a "Something else (type it)" row — with a numbered text fallback
+    for non-interactive terminals (`AgentIO.select`, `chooseWith` delegates;
+    unit-tested via a stub). Typing `/` then Tab completes commands, and **`@path`
+    references Tab-complete against the filesystem** (`parseAtToken`, unit-tested).
+  - ⬜ Remaining: make the yes/no **confirmations** arrow-selectable too; apply the
+    options prompt to the remaining selections (execution backend/executor,
+    LLM-proposed gap tools); live-color the `@` fragment as it's typed and a fuller
+    inline command dropdown; reduce redundant intent questions; and fuller free-form
+    redirection everywhere (treat any answer as a possible new instruction/question
+    and re-plan, closer to a coding agent).
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
@@ -279,7 +284,11 @@ validates that it **runs end-to-end** — a composed pipeline executes via
   (fastqc→fastp→bwa/mem→samtools/sort→multiqc) run end-to-end.
   - ⬜ Remaining: smarter semantic disambiguation for unusual channel shapes and
     non-linear (branching/joining) DAGs; today's matcher targets linear flows and
-    exposes best-effort choices for review.
+    exposes best-effort choices for review. Also: **module-choice quality depends
+    heavily on the model** — a small local model (e.g. Llama-8B/70B) tends to pick
+    modules by fuzzy name match (proposing unrelated ones like `agat`/`hlala` for a
+    protein-graph task), so surface a relevance/confidence signal per proposed
+    module and let the scientist prune before generation (Claude picks far better).
 - ✅ **nf-core principles by construction.** Generated projects include real
   modules installed from the pinned commit, `modules.json` with git-SHA-pinned
   modules, `nextflow_schema.json` + samplesheet schema, the `meta` map convention,
