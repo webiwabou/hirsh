@@ -19,11 +19,23 @@ export interface TerminalIOHooks {
   getHelp: () => string;
 }
 
+/** Slash commands, for Tab-completion and the "/" hint. */
+const COMMANDS = ["/help", "/status", "/reset", "/exit"];
+
 export class TerminalIO implements AgentIO {
   private readonly rl: readline.Interface;
 
   constructor(private readonly hooks: TerminalIOHooks) {
-    this.rl = readline.createInterface({ input: stdin, output: stdout });
+    this.rl = readline.createInterface({
+      input: stdin,
+      output: stdout,
+      // Tab-completes slash commands (type "/" then Tab to see them).
+      completer: (line: string): [string[], string] => {
+        if (!line.startsWith("/")) return [[], line];
+        const hits = COMMANDS.filter((c) => c.startsWith(line.toLowerCase()));
+        return [hits.length ? hits : COMMANDS, line];
+      },
+    });
   }
 
   close(): void {
@@ -120,6 +132,11 @@ export class TerminalIO implements AgentIO {
   /** Returns true if the line was a special command and it was handled. */
   private maybeHandleCommand(line: string): boolean {
     if (!line.startsWith("/")) return false;
+    // A bare "/" shows the available commands (Claude-Code-style hint).
+    if (line === "/") {
+      this.info("Commands: " + COMMANDS.join("  ") + "  (press Tab to complete)");
+      return true;
+    }
     const cmd = line.split(/\s+/)[0].toLowerCase();
     switch (cmd) {
       case "/status":
