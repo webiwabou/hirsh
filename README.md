@@ -330,7 +330,9 @@ references used, output directory and status. When a new request resembles a pas
 one, it surfaces the relevant history ("From your project memory — similar past
 analyses: …") so you can pick up where you left off. During parameterization it
 also offers to **reuse a remembered reference** (genome/FASTA/GTF) or
-**samplesheet** from a relevant past run, so you don't retype them.
+**samplesheet** from a relevant past run, so you don't retype them. The first time,
+Hirsh **asks for your consent** to keep this memory (it's local and never uploaded)
+and remembers your choice.
 
 It also remembers the **execution environment** you last used *on this machine*
 (the backend — Docker/Singularity/Conda/Mamba — and the executor with its queue)

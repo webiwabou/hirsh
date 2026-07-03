@@ -457,8 +457,12 @@ The full realization: a scientific collaborator, not a command builder.
     the backend/executor selection). This directly serves the multi-machine story:
     your laptop keeps defaulting to Docker+local, your HPC login node to
     Singularity+Slurm, without re-picking each session.
-  - ⬜ Remaining: a first-run consent prompt, and persisting the choice back to the
-    config file.
+  - ✅ **First-run consent.** Memory no longer records silently: on the first run
+    Hirsh asks once whether it may remember analyses (stating plainly the store is
+    local and never uploaded), persists the answer (`consent` in the store), and
+    never asks again; declining gates off all memory reads/writes
+    (`ensureMemoryConsent`/`memoryEnabled`, unit-tested).
+  - ⬜ Remaining: persist the backend/executor choice back to the config file.
 - 🔵 **Scientific dialogue.** Between understanding the intent and choosing a
   pipeline, Hirsh reviews the **experimental design** — biological replication,
   controls, confounders and batch effects, group balance, fit to the objective —
