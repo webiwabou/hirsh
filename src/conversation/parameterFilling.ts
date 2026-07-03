@@ -19,6 +19,7 @@ import type { ContainerEngine, HirshConfig } from "../config/types.js";
 import type { PipelineDefinition, PipelineParam } from "../pipelines/types.js";
 import type { AgentIO } from "./io.js";
 import type { Session } from "./session.js";
+import { classifyPathAnswer, pathReference, wantsTestProfile } from "./pathInput.js";
 import {
   checkSomaticDesign,
   inferPairs,
@@ -96,7 +97,9 @@ export async function fillParameters(
 
   if (!session.useTestProfile) {
     if (!haveSamplesheet) await buildSamplesheet(io, session, pipeline, runDir, suggestions);
-    await fillReferenceParams(io, session, pipeline, suggestions);
+    // buildSamplesheet may have switched to the test profile (the user changed
+    // their mind at the file prompt); if so, skip the real-data reference params.
+    if (!session.useTestProfile) await fillReferenceParams(io, session, pipeline, suggestions);
   }
 
   await fillOptionalParams(io, session, pipeline);
@@ -137,11 +140,11 @@ export async function fillReferenceParams(
     return;
   }
 
-  const fasta = await askDefault(io, "Path to the reference genome FASTA", remFasta);
-  if (fasta) session.paramValues.fasta = resolve(fasta);
+  const fasta = await askDefault(io, "Path to the reference genome FASTA (reference a path with @)", remFasta);
+  if (fasta) session.paramValues.fasta = resolve(pathReference(fasta));
   if (pipeline.params.some((p) => p.name === "gtf")) {
-    const gtf = await askDefault(io, "Path to the GTF annotation", remGtf);
-    if (gtf) session.paramValues.gtf = resolve(gtf);
+    const gtf = await askDefault(io, "Path to the GTF annotation (reference a path with @)", remGtf);
+    if (gtf) session.paramValues.gtf = resolve(pathReference(gtf));
   }
 }
 
@@ -182,6 +185,41 @@ async function askTyped(io: AgentIO, p: PipelineParam): Promise<string | number 
   return raw;
 }
 
+type DirAnswer = { kind: "path"; path: string } | { kind: "test" } | { kind: "none" };
+
+/**
+ * Asks for an input directory but stays conversational: it accepts an explicit
+ * `@path` reference, a bare path, or a change of mind ("run the test profile") —
+ * rather than treating any sentence as a directory. Re-asks with guidance on an
+ * unclear answer. Returns "test" if the user redirected to the test profile.
+ */
+async function askInputDir(
+  io: AgentIO,
+  pipeline: PipelineDefinition,
+  prompt: string,
+): Promise<DirAnswer> {
+  const canTest = pipeline.profiles.hasTestProfile;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const raw = await io.ask(prompt);
+    const ans = classifyPathAnswer(raw);
+    if (ans.kind === "path") return { kind: "path", path: ans.path };
+    if (canTest && wantsTestProfile(raw)) return { kind: "test" };
+    if (ans.kind === "empty") return { kind: "none" };
+    io.warn(
+      'That doesn\'t look like a folder path. Reference one with "@", e.g. @/data/reads' +
+        (canTest ? ', or say "test profile" to use the bundled test data.' : "."),
+    );
+  }
+  io.info("I'll stop asking for now — you can /reset and try again, or point me at a folder with @.");
+  return { kind: "none" };
+}
+
+/** Switches to the bundled test profile mid-parameterization (no input files). */
+function switchToTestProfile(io: AgentIO, session: Session): void {
+  io.info("Switching to the test profile — it uses bundled data, so no input files are needed.");
+  session.useTestProfile = true;
+}
+
 /** Builds the samplesheet from the user's files. */
 async function buildSamplesheet(
   io: AgentIO,
@@ -211,10 +249,13 @@ async function buildSamplesheet(
   const rows: Array<Record<string, string>> = [];
 
   if (isProtein) {
-    const dir = await io.ask(
-      "Directory with the protein FASTA files (.fasta/.fa, or any folder of sequence files):",
+    const got = await askInputDir(
+      io,
+      pipeline,
+      "Directory with the protein FASTA files (reference a path with @, e.g. @/data/proteins):",
     );
-    const entries = await resolveFastaFiles(io, dir, runDir);
+    if (got.kind === "test") return switchToTestProfile(io, session);
+    const entries = got.kind === "path" ? await resolveFastaFiles(io, got.path, runDir) : [];
     if (entries.length === 0) {
       io.warn("No FASTA files to use; the samplesheet will be empty.");
     }
@@ -225,10 +266,13 @@ async function buildSamplesheet(
       io.info(`Using ${fetchedPairs.length} downloaded sample(s) from the public data.`);
       pairs = fetchedPairs;
     } else {
-      const dir = await io.ask(
-        "Directory with the FASTQ files (.fastq.gz / .fq.gz, or any folder of sequence files):",
+      const got = await askInputDir(
+        io,
+        pipeline,
+        "Directory with the FASTQ files (reference a path with @, e.g. @/data/reads):",
       );
-      pairs = inferPairs(await resolveFastqScan(io, dir, runDir));
+      if (got.kind === "test") return switchToTestProfile(io, session);
+      pairs = got.kind === "path" ? inferPairs(await resolveFastqScan(io, got.path, runDir)) : [];
     }
     if (isSarek) {
       rows.push(...(await buildSarekRows(io, pairs)));
@@ -347,9 +391,9 @@ async function useExistingSamplesheet(
   const useExisting = await io.confirm("Do you already have a samplesheet CSV?", false);
   if (!useExisting) return false;
 
-  const raw = (await io.ask("Path to your samplesheet CSV:")).trim();
+  const raw = (await io.ask("Path to your samplesheet CSV (reference a path with @):")).trim();
   if (!raw) return false;
-  const abs = resolve(raw);
+  const abs = resolve(pathReference(raw));
   let text: string;
   try {
     text = readFileSync(abs, "utf8");
