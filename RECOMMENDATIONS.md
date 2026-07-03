@@ -338,10 +338,14 @@ The full realization: a scientific collaborator, not a command builder.
   degrades gracefully to asking for local files if there are no accessions, the
   user declines, the toolchain is missing, or the run fails (`execution/fetchngs.ts`
   detection/command builders unit-tested; `phaseFetchData` + the Phase C
-  fetched-data guard wired and unit-tested).
-  - ⬜ Remaining: resolve/preview sample metadata before downloading, cache fetched
-    data across runs, and adapt the fetched samplesheet for pipelines fetchngs
-    can't format directly (e.g. sarek tumor/normal).
+  fetched-data guard wired and unit-tested). When fetchngs **can't** format the
+  samplesheet for the target pipeline (it supports rnaseq/atacseq/… but not sarek),
+  Hirsh **re-shapes** it: it pulls the FASTQ pairs from the generic samplesheet and
+  Phase C builds the pipeline's proper one — for sarek, asking per-sample patient +
+  tumor/normal — so "fetch public data → run sarek" works too
+  (`fastqPairsFromSamplesheet` + `session.fetchedPairs`, unit-tested).
+  - ⬜ Remaining: resolve/preview sample metadata before downloading, and cache
+    fetched data across runs.
 - 🔵 **Project memory.** Hirsh remembers past analyses across sessions in a local,
   private JSON store (`~/.bioagent/memory.json`): each run's pipeline, intent
   (organism/data/objective), references used, outdir and status. When a new request

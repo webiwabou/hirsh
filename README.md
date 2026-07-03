@@ -307,9 +307,13 @@ If your request names **accession numbers** — SRA/ENA/DDBJ (`SRR…`, `ERR…`
 picking the pipeline and offers to **download the data automatically with
 [nf-core/fetchngs](https://nf-co.re/fetchngs)**, building a samplesheet (formatted
 for the target pipeline when supported). That samplesheet then feeds
-parameterization, so you skip building it by hand. The download runs only after
-your confirmation, and if there are no accessions — or you'd rather not fetch —
-Hirsh just asks for your local files instead.
+parameterization, so you skip building it by hand. When fetchngs can't format the
+samplesheet for your pipeline (e.g. sarek), Hirsh re-shapes it — pulling the FASTQ
+pairs out and building the proper samplesheet in Phase C (for sarek, asking each
+sample's patient and tumor/normal status) — so fetching public data works for
+those pipelines too. The download runs only after your confirmation, and if there
+are no accessions — or you'd rather not fetch — Hirsh just asks for your local
+files instead.
 
 ## Chaining the follow-up analysis
 
