@@ -290,6 +290,21 @@ one-off analysis into reusable, community-grade software.
 
 The full realization: a scientific collaborator, not a command builder.
 
+- ✅ **Automatic public-data retrieval.** A scientist rarely has FASTQ files on
+  hand — they have *accession numbers* from a paper. Hirsh now recognizes public
+  accessions in the request (SRA/ENA/DDBJ runs, experiments, studies; GEO series/
+  samples; BioProject/BioSample; ArrayExpress) and, after pipeline selection,
+  offers to **download the data with nf-core/fetchngs** and build a samplesheet —
+  formatted for the target pipeline via `--nf_core_pipeline` when supported —
+  which then feeds Phase C, so parameterization skips manual samplesheet
+  construction. The download runs through the same confirmed-execution path and
+  degrades gracefully to asking for local files if there are no accessions, the
+  user declines, the toolchain is missing, or the run fails (`execution/fetchngs.ts`
+  detection/command builders unit-tested; `phaseFetchData` + the Phase C
+  fetched-data guard wired and unit-tested).
+  - ⬜ Remaining: resolve/preview sample metadata before downloading, cache fetched
+    data across runs, and adapt the fetched samplesheet for pipelines fetchngs
+    can't format directly (e.g. sarek tumor/normal).
 - 🔵 **Project memory.** Hirsh remembers past analyses across sessions in a local,
   private JSON store (`~/.bioagent/memory.json`): each run's pipeline, intent
   (organism/data/objective), references used, outdir and status. When a new request
@@ -363,6 +378,7 @@ The full realization: a scientific collaborator, not a command builder.
 ## North-star capability checklist
 
 - ⬜ Understands biological intent without the tool being named
+- ✅ Fetches public data from accessions on its own (SRA/ENA/GEO/… via nf-core/fetchngs → samplesheet)
 - ✅ Selects the right existing pipeline
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)

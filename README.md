@@ -222,10 +222,13 @@ HTML reports (open them in your browser):
 - **B · Selection** — picks the right curated nf-core pipeline (or honestly says
   none applies), lets you correct it, and — if none fits — offers to **compose**
   one from nf-core modules (see below).
+- **Data retrieval** — if your request named public accessions (SRA/ENA/GEO/…),
+  Hirsh offers to download them with nf-core/fetchngs and build the samplesheet
+  before parameterization (see below).
 - **C · Parameterization** — fills parameters and builds the samplesheet:
   infers R1/R2 pairs from a FASTQ directory, asks per-sample tumor/normal +
-  patient for sarek somatic runs (and per-sample strandedness for rnaseq), or
-  validates an existing samplesheet you point it at.
+  patient for sarek somatic runs (and per-sample strandedness for rnaseq),
+  validates an existing samplesheet you point it at, or uses the one just fetched.
 - **D · Confirmation and execution** — checks whether the machine can meet the
   pipeline's resource needs (adapting the caps or advising against the run),
   shows the full command and `params.yaml`, and only runs after your explicit
@@ -275,6 +278,19 @@ defaults to Singularity+Slurm, with no re-picking each session.
 
 It's on by default and stays on your machine; disable it with
 `memory.enabled: false`.
+
+## Public data from accessions
+
+Most analyses start from data in a public archive, not FASTQ files on your disk.
+If your request names **accession numbers** — SRA/ENA/DDBJ (`SRR…`, `ERR…`,
+`SRP…`, experiments/samples), GEO (`GSE…`, `GSM…`), BioProject/BioSample
+(`PRJNA…`, `SAMN…`) or ArrayExpress (`E-MTAB-…`) — Hirsh recognizes them after
+picking the pipeline and offers to **download the data automatically with
+[nf-core/fetchngs](https://nf-co.re/fetchngs)**, building a samplesheet (formatted
+for the target pipeline when supported). That samplesheet then feeds
+parameterization, so you skip building it by hand. The download runs only after
+your confirmation, and if there are no accessions — or you'd rather not fetch —
+Hirsh just asks for your local files instead.
 
 ## Resource awareness
 
@@ -401,9 +417,9 @@ npm run verify:defs # check pinned pipeline definitions against upstream nextflo
 
 ## Not yet (on the roadmap)
 
-Remote/HPC and cloud execution, automatic public-data download, `nf-core lint`
-in the composition loop and realistic bundled test data, contributing modules
-back to nf-core, persistent memory across sessions, and a graphical interface.
+A green `nf-core lint` in the composition loop with realistic bundled test data,
+automated nf-core/modules PRs, live cloud pricing and real runtime estimates,
+Azure/GCP executors, and a graphical interface.
 These are the evolutionary
 milestones toward the co-scientist vision — see
 [RECOMMENDATIONS.md](RECOMMENDATIONS.md) for the full roadmap and

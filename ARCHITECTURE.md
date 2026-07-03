@@ -43,6 +43,7 @@ src/
 │   ├── envCheck.ts   verifies nextflow + the chosen backend (docker/singularity/conda/mamba) on PATH
 │   ├── environment.ts  detects backends, interactive selection, Nextflow/Conda/Java bootstrap (Phase 3)
 │   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
+│   ├── fetchngs.ts   public-data accession detection + nf-core/fetchngs command builders (Phase 6)
 │   ├── negotiation.ts  infrastructure alternatives (cap/cluster/cloud) with rough time/cost/feasibility (Phase 3)
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)
 │   ├── git.ts        git init + initial commit for a generated project (Phase 5)
@@ -152,6 +153,14 @@ No other module depends on the concrete provider.
   `nextflow config` and a `-profile test -stub-run` so the composed pipeline runs
   end-to-end unedited. Non-linear DAGs and an `nf-core lint` gate are the next
   milestone.
+- **Public-data retrieval (Phase 6).** `execution/fetchngs.ts` detects accession
+  ids in the request (SRA/ENA/DDBJ, GEO, BioProject/BioSample, ArrayExpress) with
+  anchored regexes and builds a pinned `nf-core/fetchngs` run (all pure/testable).
+  `stateMachine.ts::phaseFetchData` runs after pipeline selection: it offers the
+  download, executes it through the normal `runNextflow` path, validates the
+  emitted samplesheet against the pipeline's columns and sets it on the session.
+  `parameterFilling.ts` then skips manual samplesheet construction (the `dataReady`
+  guard). Every failure mode falls back to normal local-file parameterization.
 - **Execution via `-params-file`.** `parameterFilling.ts` writes a reviewable
   `params.yaml` and the command references it, instead of a long CLI. Booleans and
   resource caps flow through cleanly, and there is no shell (params never touch a
