@@ -1,6 +1,6 @@
 /**
- * Terminal presentation: ASCII DNA-helix logo, a rounded welcome frame and
- * inline tips, in the spirit of Claude Code's launch banner.
+ * Terminal presentation: a small node-motif logo, a rounded welcome frame and
+ * inline tips, in the spirit of Claude Code's launch banner — kept minimal.
  *
  * All rendering is pure string building so it can be tested without a TTY.
  */
@@ -13,19 +13,15 @@ function visibleLength(s: string): number {
   return s.replace(ANSI_RE, "").length;
 }
 
-/** The DNA double-helix logo (5 lines). */
+/**
+ * A compact one-line logo: a three-node "pipeline" motif and the wordmark.
+ * (A minimal nod to connected analysis steps.)
+ */
 export function renderLogo(): string {
-  const strand = chalk.cyan;
-  const rung = chalk.green;
-  const base = chalk.greenBright;
-  const L = [
-    strand("  ╲   ╱   ╲   ╱   ╲   ╱"),
-    strand("   ╲ ╱     ╲ ╱     ╲ ╱"),
-    base("    ●") + rung("───────") + base("●") + rung("───────") + base("●"),
-    strand("   ╱ ╲     ╱ ╲     ╱ ╲"),
-    strand("  ╱   ╲   ╱   ╲   ╱   ╲"),
-  ];
-  return L.join("\n");
+  const dot = chalk.cyan("●");
+  const link = chalk.gray("──");
+  const mark = dot + link + dot + link + dot;
+  return `${mark}  ${chalk.bold.cyan("hirsh")}`;
 }
 
 /**
@@ -54,38 +50,31 @@ export interface WelcomeInfo {
   cwd: string;
 }
 
-/** Full welcome screen: logo + framed title/meta + tips. */
+/** Full welcome screen: a minimal logo + tagline, then a light framed meta + tips. */
 export function renderWelcome(info: WelcomeInfo): string {
   const logo = renderLogo();
+  const tagline = chalk.gray("bioinformatics co-scientist");
 
-  const title =
-    chalk.bold.cyan("Hirsh") + chalk.gray("  ·  bioinformatics pipeline agent");
+  const label = (t: string) => chalk.gray(t.padEnd(10));
   const meta = [
-    chalk.gray("model    ") + info.providerLabel,
-    chalk.gray("config   ") + info.configSource,
-    chalk.gray("pipelines") + " " + info.pipelines.join(", "),
-    chalk.gray("env      ") + info.envLine,
+    label("model") + info.providerLabel,
+    label("config") + info.configSource,
+    label("pipelines") + info.pipelines.join(", "),
+    label("env") + info.envLine,
   ];
+  const cmd = (c: string, d: string) => chalk.cyan(c) + chalk.gray(" " + d);
   const tips = [
-    chalk.gray("Tips"),
-    chalk.gray("  •  describe your analysis in plain English to begin"),
-    chalk.gray("  •  ") + chalk.white("/help") + chalk.gray("  commands   ") + chalk.white("/status") + chalk.gray("  progress"),
-    chalk.gray("  •  ") + chalk.white("/reset") + chalk.gray(" restart    ") + chalk.white("/exit") + chalk.gray("   quit"),
+    chalk.gray("describe your analysis in plain English to begin"),
+    [cmd("/help", "commands"), cmd("/status", "progress"), cmd("/reset", "restart"), cmd("/exit", "quit")].join(
+      chalk.gray("   "),
+    ),
   ];
 
   // Divider spans the widest content line so it reads as a full separator.
-  const contentWidth = Math.max(...[title, ...meta, ...tips].map(visibleLength));
+  const contentWidth = Math.max(...[...meta, ...tips].map(visibleLength));
   const divider = chalk.gray("─".repeat(contentWidth));
 
-  const framed = box([title, "", ...meta, divider, ...tips]);
+  const framed = box([...meta, divider, ...tips]);
 
-  return "\n" + indent(logo, 2) + "\n\n" + framed + "\n";
-}
-
-function indent(block: string, n: number): string {
-  const prefix = " ".repeat(n);
-  return block
-    .split("\n")
-    .map((l) => prefix + l)
-    .join("\n");
+  return "\n  " + logo + "\n  " + tagline + "\n\n" + framed + "\n";
 }

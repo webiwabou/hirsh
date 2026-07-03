@@ -23,7 +23,7 @@ explicit confirmation) and explains the results in plain language.
 > requiring zero technical knowledge from the scientist).
 
 ```
-    ●───────●───────●      Hirsh · bioinformatics pipeline agent
+    ●──●──●  hirsh   ·   bioinformatics co-scientist
 ```
 
 ## Requirements
@@ -231,7 +231,7 @@ sequence data, pointing at a file with `@path` is usually cleaner than pasting.
 ### Example session
 
 ```
-    ●───────●───────●      Hirsh · bioinformatics pipeline agent
+    ●──●──●  hirsh   ·   bioinformatics co-scientist
 
 What bioinformatics analysis would you like to run?
 › I have mouse RNA-seq, treated vs control with 3 replicates, and I want to find differentially expressed genes.
