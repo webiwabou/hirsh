@@ -127,9 +127,13 @@ Make every supported pipeline safe to run for real and make its output land as
   matter — per-sample library sizes/column totals from count matrices, per-sample
   metrics from MultiQC's `multiqc_general_stats.txt`, and variant counts from VCFs
   (incl. `.vcf.gz`) — and hands the LLM concrete figures instead of file listings
-  (pure parsers in `results/parsers.ts`, unit-tested).
+  (pure parsers in `results/parsers.ts`, unit-tested). Those numbers also render as
+  **compact inline bar charts** before the prose summary — per-sample library sizes
+  from count matrices, significant genes per contrast — so the scientist sees the
+  shape of the data at a glance (`results/charts.ts::renderBarChart`, unit-tested;
+  shown for primary, follow-up and composed runs).
   - ⬜ Remaining: per-tool detail (RSeQC/Picard sections, variant-type breakdowns)
-    and small inline tables/charts.
+    and MultiQC per-sample metric charts (values are formatted strings today).
 - ✅ **Correct multi-sample designs.** sarek now asks per-sample patient +
   tumor/normal (grouped by patient) and warns when a patient lacks a matched
   normal; rnaseq supports per-sample strandedness (shared default + overrides);

@@ -72,6 +72,7 @@ src/
 │   └── validate.ts   `nextflow config` + `-profile test -stub-run` + `nf-core lint` gate
 ├── results/
 │   ├── interpreter.ts  locates outputs, parses tables/JSON, NL summary via LLM
+│   ├── charts.ts     compact inline terminal bar charts of the key numbers (Phase 2)
 │   └── methods.ts    publication-ready methods paragraph + refs from pinned/tool versions (Phase 6)
 └── memory/
     └── store.ts      persistent project memory — past runs, references, recall, remembered backend/executor (Phase 6)
