@@ -102,6 +102,7 @@ import {
 import { collectLocalTool, toNfCoreModule, type LocalToolSpec } from "../composition/localModule.js";
 import { proposeLocalTools } from "../composition/localToolProposal.js";
 import { writeContribution } from "../composition/contribution.js";
+import { renderNoveltyManifest, summarizeNovelty } from "../composition/novelty.js";
 import { buildInclusionGuide, validateNfCoreName } from "../composition/inclusion.js";
 import { packagePipeline, type PackageSpec } from "../composition/packaging.js";
 import type { ResolvedComposition } from "../composition/types.js";
@@ -605,6 +606,18 @@ export class Agent {
 
     this.io.say(`Generated ${result.files.length} files at ${result.dir}`);
     for (const w of result.warnings) this.io.warn("  • " + w);
+
+    // Provenance for novelty: an honest reused-vs-new manifest for the project.
+    try {
+      const novelty = summarizeNovelty(resolved);
+      writeFileSync(join(result.dir, "NOVELTY.md"), renderNoveltyManifest(novelty), "utf8");
+      this.io.info(
+        `Novelty: ${novelty.reused.length} reused nf-core module(s), ${novelty.custom.length} ` +
+          `new custom tool(s) — see ${join(result.dir, "NOVELTY.md")}`,
+      );
+    } catch {
+      /* best-effort */
+    }
     if (result.referenceParams.length > 0) {
       this.io.info(
         `Reference parameters to set for a real run: ${result.referenceParams
