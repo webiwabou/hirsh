@@ -43,7 +43,10 @@ parameterize → confirm → run → interpret.
     choice the user can answer in free text ("actually it's paired-end WGS") to have
     Hirsh fold that back into the intent and reconsider (`conversation/answers.ts`,
     `confirmOrText`).
-- ✅ Swappable LLM backends (Ollama, Anthropic) behind one interface
+- ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
+  (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
+  OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
+  they have Claude credits
 - ✅ Extensible pipeline registry (rnaseq, sarek, proteinfamilies)
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation

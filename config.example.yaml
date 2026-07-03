@@ -3,7 +3,12 @@
 # The Anthropic API key is NEVER placed here: it is read from the environment
 # variable named below.
 
-# Active LLM provider: "ollama" | "anthropic"
+# Active LLM provider: "ollama" | "anthropic" | "openai"
+#   ollama    — local models (no API key)
+#   anthropic — Claude
+#   openai    — ANY OpenAI-compatible endpoint, incl. FREE tiers (Groq, Gemini,
+#               Cerebras, OpenRouter) — handy to try Hirsh without local models
+#               or paid credits. See the "openai" section below.
 provider: ollama
 
 # --- Ollama backend (local server) ---
@@ -19,7 +24,23 @@ ollama:
 anthropic:
   # The API key is read from this environment variable, not from this file.
   apiKeyEnv: ANTHROPIC_API_KEY
-  model: claude-3-5-haiku-20241022
+  model: claude-fable-5
+  temperature: 0.2
+  maxTokens: 4096
+
+# --- OpenAI-compatible backend (Groq / Gemini / Cerebras / OpenRouter / OpenAI / local) ---
+# Works with any endpoint that speaks the OpenAI Chat Completions API. The API key
+# is read from the env var named in apiKeyEnv (leave the var unset for a keyless
+# local server). Defaults below use Groq's FREE tier.
+#   • Groq (free):     baseUrl https://api.groq.com/openai/v1        key GROQ_API_KEY      (console.groq.com)
+#   • Gemini (free):   baseUrl https://generativelanguage.googleapis.com/v1beta/openai
+#                      model gemini-2.0-flash   key GEMINI_API_KEY   (aistudio.google.com)
+#   • Cerebras (free): baseUrl https://api.cerebras.ai/v1            key CEREBRAS_API_KEY
+#   • local vLLM:      baseUrl http://localhost:8000/v1             (no key needed)
+openai:
+  baseUrl: https://api.groq.com/openai/v1
+  model: llama-3.3-70b-versatile   # must support tool/function calling
+  apiKeyEnv: GROQ_API_KEY          # NAME of the env var, not the key itself
   temperature: 0.2
   maxTokens: 4096
 

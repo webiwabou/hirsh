@@ -37,10 +37,14 @@ explicit confirmation) and explains the results in plain language.
   pick one interactively (recommending the most reproducible option present). On a
   fresh machine it can install **Conda/Mamba** (Miniforge) and **Java** for you
   with confirmation; Docker/Singularity installs stay guided (they need root).
-- An **LLM backend**:
+- An **LLM backend** (any one):
   - **Ollama** running locally (`ollama serve`) with a tool-calling capable model
-    pulled (`ollama pull <model>`), **or**
-  - an **Anthropic API key** in an environment variable.
+    pulled (`ollama pull <model>`),
+  - an **Anthropic API key** (Claude) in an environment variable, **or**
+  - any **OpenAI-compatible endpoint** — including **free tiers** like
+    [Groq](https://console.groq.com), [Google Gemini](https://aistudio.google.com)
+    and Cerebras. Handy to try Hirsh with a non-local model before you have Claude
+    credits (see [No local model and no Claude credits yet?](#no-local-model-and-no-claude-credits-yet)).
 
 Hirsh checks Nextflow and the execution backend at startup and again before a
 run. If something is missing it tells you (and offers to install Nextflow), and
@@ -150,6 +154,40 @@ environment variable named in `apiKeyEnv`:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+### Example — OpenAI-compatible (Groq / Gemini / …)
+
+```yaml
+provider: openai
+openai:
+  baseUrl: https://api.groq.com/openai/v1   # any OpenAI-compatible endpoint
+  model: llama-3.3-70b-versatile            # must support tool/function calling
+  apiKeyEnv: GROQ_API_KEY                    # NAME of the env var, not the key
+  temperature: 0.2
+  maxTokens: 4096
+execution:
+  containerEngine: docker
+  workdir: ./runs
+```
+
+### No local model and no Claude credits yet?
+
+You can try Hirsh right now on a **free**, non-local model — no Claude credits and
+no GPU needed — because the `openai` provider works with any OpenAI-compatible
+endpoint, and several have free tiers with the **tool calling** Hirsh needs:
+
+- **[Groq](https://console.groq.com)** (recommended to start): sign up, create an
+  API key, and use `baseUrl: https://api.groq.com/openai/v1` with a tool-calling
+  model like `llama-3.3-70b-versatile`. Then `export GROQ_API_KEY=gsk_...`.
+- **[Google Gemini](https://aistudio.google.com)**: free API key; use
+  `baseUrl: https://generativelanguage.googleapis.com/v1beta/openai`, model
+  `gemini-2.0-flash`, `apiKeyEnv: GEMINI_API_KEY`.
+- **Cerebras / OpenRouter**: also free tiers; same shape, different `baseUrl`.
+
+The key is read from the env var you name in `apiKeyEnv` (never written to the
+config). When your Claude credits arrive, just switch `provider: anthropic` — the
+rest of your setup is unchanged. A **keyless local** OpenAI server (vLLM, LM
+Studio) works too: point `baseUrl` at it and leave the key env var unset.
 
 ## Usage
 

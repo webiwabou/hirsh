@@ -25,6 +25,7 @@ src/
 │   ├── provider.ts   LLMProvider interface + types (messages, tools, responses)
 │   ├── ollama.ts     Ollama adapter (HTTP /api/chat, streaming + tool calling)
 │   ├── anthropic.ts  Anthropic adapter (@anthropic-ai/sdk)
+│   ├── openaiCompat.ts  OpenAI-compatible adapter via fetch (Groq/Gemini/Cerebras/OpenRouter/OpenAI/local)
 │   └── index.ts      createProvider(config): factory based on config.provider
 ├── pipelines/        pipeline registry
 │   ├── types.ts      PipelineDefinition schema
@@ -114,7 +115,11 @@ catalog the LLM sees during pipeline selection.
 > with a radically different samplesheet format may require a new branch there;
 > the current three cover the two common patterns.
 
-## How to add a third LLM provider
+## How to add another LLM provider
+
+The three shipped providers show the pattern; `llm/openaiCompat.ts` is a worked
+example that covers many services at once (any OpenAI-compatible endpoint — Groq,
+Gemini, Cerebras, OpenRouter, OpenAI, or a local server).
 
 1. Create `src/llm/<provider>.ts` implementing the `LLMProvider` interface
    (`chat()` with `tools`/`forceTool` support and streaming via `onToken`, plus
@@ -125,7 +130,9 @@ catalog the LLM sees during pipeline selection.
 3. Add its config section in `config/types.ts` and its parsing in
    `config/loadConfig.ts`.
 
-No other module depends on the concrete provider.
+No other module depends on the concrete provider. Before reaching for a new
+adapter, check whether the service is OpenAI-compatible — if so, the existing
+`openai` provider already handles it via `baseUrl`.
 
 ## Relevant implementation notes
 
