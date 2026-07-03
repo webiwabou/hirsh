@@ -126,7 +126,12 @@ Make every supported pipeline safe to run for real and make its output land as
   Zod via `llm/structured.ts`; on a missing/invalid call the model is re-prompted
   once and, if it still fails, the caller falls back gracefully. Makes weaker local
   models (e.g. small Ollama models) far more reliable. Unit-tested with a mock
-  provider; verified live end-to-end.
+  provider; verified live end-to-end. Also tolerant of **strict server-side tool
+  validation**: some endpoints (e.g. Groq) 400 when a model emits a wrong-typed
+  argument — the boolean field accepts a stringified value (coerced on our side)
+  and the OpenAI-compatible provider treats a `tool_use_failed` 400 as a retry/
+  fallback signal rather than a fatal error, so a weak model's slip no longer
+  aborts the session.
 - ✅ **Reproducibility bundle.** Every run writes `run_manifest.json` +
   `PROVENANCE.md` into the run directory, capturing the pipeline + pinned revision,
   the exact command, resolved params (`params.yaml`), samplesheet, environment
