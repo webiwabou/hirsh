@@ -50,6 +50,15 @@ import {
 } from "../execution/staging.js";
 import { runNextflow } from "../execution/runner.js";
 import {
+  buildFetchngsCommand,
+  detectAccessions,
+  fetchngsPipelineTag,
+  fetchngsSamplesheetPath,
+  renderIdsFile,
+  type Accession,
+} from "../execution/fetchngs.js";
+import { validateSamplesheetContent } from "../execution/samplesheet.js";
+import {
   assessResources,
   detectMachine,
   formatMemoryGB,
@@ -136,6 +145,11 @@ export class Agent {
     }
     const pipeline = outcome.pipeline;
     session.selectedPipeline = pipeline;
+
+    // Co-scientist milestone: if the request names public accessions (SRA/GEO/…),
+    // offer to download the data with nf-core/fetchngs and build the samplesheet
+    // before parameterization consumes it.
+    await this.phaseFetchData(session, pipeline);
 
     session.phase = "params";
     this.io.heading("Phase C · Parameterization");
@@ -317,6 +331,134 @@ export class Agent {
     if (byName) return { kind: "pipeline", pipeline: byName };
     this.io.warn("I didn't recognize that pipeline.");
     return this.pickManually(session);
+  }
+
+  /**
+   * Public-data retrieval. If the request names public accessions (SRA/ENA/DDBJ
+   * runs, GEO series, BioProjects…), Hirsh offers to download the data with
+   * nf-core/fetchngs and build a samplesheet for the chosen pipeline — removing
+   * the biggest manual step for a scientist who only has accession numbers.
+   * Best-effort and skippable: on any obstacle it degrades to the normal Phase C
+   * (asking for local files) rather than blocking.
+   */
+  private async phaseFetchData(session: Session, pipeline: PipelineDefinition): Promise<void> {
+    const text = [
+      session.query.objective,
+      session.query.experimentalDesign,
+      ...session.transcript.filter((t) => t.role === "user").map((t) => t.text),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const accessions = detectAccessions(text);
+    if (accessions.length === 0) return;
+
+    this.io.heading("Public-data retrieval");
+    this.io.say(
+      `I spotted ${accessions.length} public accession(s) in your request:`,
+    );
+    for (const a of accessions) this.io.info(`  • ${a.id} (${a.kind})`);
+    const tag = fetchngsPipelineTag(pipeline.name);
+    this.io.info(
+      "I can download these with nf-core/fetchngs and build a samplesheet" +
+        (tag ? ` formatted for ${pipeline.name}.` : "; it may need a small adjustment for this pipeline."),
+    );
+    const go = await this.io.confirm("Fetch the data automatically now?", true, { auto: true });
+    if (!go) {
+      this.io.info("Okay — I'll ask for local files during parameterization instead.");
+      return;
+    }
+
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const fetchDir = resolve(this.config.execution.workdir, `fetchngs-${ts}`);
+    const outdir = join(fetchDir, "results");
+    try {
+      mkdirSync(fetchDir, { recursive: true });
+    } catch (err) {
+      this.io.warn("Couldn't create a fetch directory: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+
+    const engine = session.engine ?? this.config.execution.containerEngine;
+    let env = await checkEnvironment(engine);
+    if (!env.nextflow.available) {
+      const boot = await bootstrapNextflow(this.io);
+      this.io.info(boot.message);
+      if (boot.installed) env = await checkEnvironment(engine);
+    }
+    if (!env.canExecute) {
+      this.io.warn(
+        "Can't fetch yet — Nextflow or the execution backend isn't available. " +
+          "I'll ask for local files during parameterization instead.",
+      );
+      return;
+    }
+
+    const idsFile = join(fetchDir, "ids.csv");
+    try {
+      writeFileSync(idsFile, renderIdsFile(accessions), "utf8");
+    } catch {
+      this.io.warn("Couldn't write the accession list; skipping the fetch.");
+      return;
+    }
+
+    const command = buildFetchngsCommand({ idsFile, outdir, engine, pipelineTag: tag });
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + command.join(" "));
+    const run = await this.io.confirm("Run this download now?", true, { auto: true });
+    if (!run) {
+      this.io.info("Not fetching. I'll ask for local files during parameterization instead.");
+      return;
+    }
+
+    this.io.heading("Running nf-core/fetchngs (live log)");
+    const result = await runNextflow(command, fetchDir, this.io, session.runEnv);
+    if (result.exitCode !== 0) {
+      this.io.warn(`fetchngs exited with an error (code ${result.exitCode}).`);
+      if (result.errorSummary) this.io.say(result.errorSummary);
+      this.io.info("I'll ask for local files during parameterization instead.");
+      return;
+    }
+
+    if (!this.applyFetchedSamplesheet(session, pipeline, outdir, accessions)) return;
+  }
+
+  /**
+   * Validates the samplesheet fetchngs produced and, if usable, records it on the
+   * session so Phase C skips manual samplesheet construction. Returns false when
+   * the samplesheet is missing/unreadable so the caller falls back to Phase C.
+   */
+  private applyFetchedSamplesheet(
+    session: Session,
+    pipeline: PipelineDefinition,
+    outdir: string,
+    accessions: Accession[],
+  ): boolean {
+    const samplesheet = fetchngsSamplesheetPath(outdir);
+    let text: string;
+    try {
+      text = readFileSync(samplesheet, "utf8");
+    } catch {
+      this.io.warn(
+        `fetchngs finished but I couldn't find its samplesheet at ${samplesheet}. ` +
+          "I'll ask for local files during parameterization instead.",
+      );
+      return false;
+    }
+
+    const report = validateSamplesheetContent(text, pipeline.samplesheet.columns);
+    this.io.say(`Downloaded ${accessions.length} accession(s); samplesheet has ${report.rowCount} sample(s).`);
+    for (const w of report.warnings) this.io.info("  ! " + w);
+    for (const e of report.errors) this.io.warn("  ✗ " + e);
+    if (!report.ok) {
+      this.io.info(
+        "The fetched samplesheet doesn't match this pipeline's columns exactly — you may need to " +
+          "adjust it. Using it anyway; review it before the real run.",
+      );
+    }
+    session.samplesheetPath = samplesheet;
+    session.paramValues.input = samplesheet;
+    this.io.info(`Using fetched samplesheet: ${samplesheet}`);
+    return true;
   }
 
   /** Phase F4 — compose a new pipeline from live nf-core modules. */

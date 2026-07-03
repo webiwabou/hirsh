@@ -74,8 +74,14 @@ export async function fillParameters(
   session.runDir = runDir;
   session.paramValues[pipeline.results.outdirParam] = outdir;
 
+  // Data may already be in hand — e.g. downloaded from public accessions via
+  // fetchngs before Phase C. In that case there's a real samplesheet, so the
+  // test profile doesn't apply and we don't rebuild the samplesheet.
+  const dataReady =
+    session.samplesheetPath !== undefined && session.paramValues.input !== undefined;
+
   // --- Test profile ---
-  if (pipeline.profiles.hasTestProfile) {
+  if (pipeline.profiles.hasTestProfile && !dataReady) {
     io.info(
       "The test profile runs the pipeline with bundled test data and references: " +
         "ideal to validate the installation without real data or long runtimes.",
@@ -84,7 +90,7 @@ export async function fillParameters(
   }
 
   if (!session.useTestProfile) {
-    await buildSamplesheet(io, session, pipeline, runDir, suggestions);
+    if (!dataReady) await buildSamplesheet(io, session, pipeline, runDir, suggestions);
     await fillReferenceParams(io, session, pipeline, suggestions);
   }
 
