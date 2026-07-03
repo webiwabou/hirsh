@@ -44,6 +44,7 @@ src/
 │   ├── environment.ts  detects backends, interactive selection, Nextflow/Conda/Java bootstrap (Phase 3)
 │   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
 │   ├── fetchngs.ts   public-data accession detection + nf-core/fetchngs command builders (Phase 6)
+│   ├── followUp.ts   runnable follow-up chaining — resolve upstream inputs + build command (Phase 2)
 │   ├── negotiation.ts  infrastructure alternatives (cap/cluster/cloud) with rough time/cost/feasibility (Phase 3)
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)
 │   ├── git.ts        git init + initial commit for a generated project (Phase 5)
@@ -153,6 +154,14 @@ No other module depends on the concrete provider.
   `nextflow config` and a `-profile test -stub-run` so the composed pipeline runs
   end-to-end unedited. Non-linear DAGs and an `nf-core lint` gate are the next
   milestone.
+- **Follow-up chaining (Phase 2).** A `PipelineDefinition.followUp` with a pinned
+  revision is *runnable*: `execution/followUp.ts` resolves the follow-up's inputs
+  from the upstream outdir and builds the command (pure). After Phase E,
+  `stateMachine.ts::phaseFollowUp` offers to launch it — wiring the upstream count
+  matrix into `--matrix`, carrying over `gtf`, and asking only for the
+  sample-condition table and contrasts — then runs it through the normal
+  confirmed-execution path, reusing the chosen backend/executor. rnaseq points at
+  nf-core/differentialabundance. It suggests-then-offers; it never auto-chains.
 - **Public-data retrieval (Phase 6).** `execution/fetchngs.ts` detects accession
   ids in the request (SRA/ENA/DDBJ, GEO, BioProject/BioSample, ArrayExpress) with
   anchored regexes and builds a pinned `nf-core/fetchngs` run (all pure/testable).

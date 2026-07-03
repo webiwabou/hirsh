@@ -92,6 +92,17 @@ Make every supported pipeline safe to run for real and make its output land as
   users can point at an existing samplesheet, which is validated against the
   pipeline's column spec (`validateSamplesheetContent`, unit-tested).
   - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
+  - ⬜ **Content-based ingestion (extension-agnostic).** Today the folder scanner
+    keys off file extensions (`.fastq/.fq[.gz]`), so sequences in a `.txt` (or any
+    non-standard name) are invisible. Planned: sniff file *content* — gzip magic
+    bytes, a FASTQ record (`@`/`+` lines) or FASTA (`>` header) — to recognize
+    sequence files regardless of extension, then offer to build the samplesheet
+    (and optionally symlink to a canonical `.fastq.gz` name so Nextflow's own
+    checks pass). **Realistic limits:** it recognizes plain-text/gzipped FASTQ/
+    FASTA only; it will *not* transparently convert binary/aligned formats
+    (BAM/CRAM/SRA/fast5/pod5 — those need a conversion step), demultiplex, or
+    invent sample grouping beyond the filename convention (ambiguous R1/R2 still
+    asks). It points at and normalizes files; it never rewrites sequence data.
 - ✅ **Schema-validated LLM outputs** with one self-correcting retry. Tool-call
   arguments (intent, pipeline selection, composition planning) are validated with
   Zod via `llm/structured.ts`; on a missing/invalid call the model is re-prompted
@@ -110,11 +121,20 @@ Make every supported pipeline safe to run for real and make its output land as
   and the command, preserving the chosen backend/executor). The `-resume` flag is
   normalized so repeated re-runs never duplicate it; each re-run re-interprets the
   results (`applyResume`/`coerceLike` unit-tested).
-- ✅ **The DE gap.** Pipelines can declare a `followUp`; rnaseq now tells the user
-  (at selection and in the results) that it produces counts and that
-  `nf-core/differentialabundance` is the next step to actually call DEGs. We
-  suggest, we do not auto-chain.
-  - ⬜ Remaining: offer to run the follow-up directly (still with confirmation).
+- ✅ **The DE gap.** Pipelines can declare a `followUp`; rnaseq tells the user (at
+  selection and in the results) that it produces counts and that
+  `nf-core/differentialabundance` is the next step to actually call DEGs. When the
+  `followUp` is **runnable** (a pinned revision plus wiring — `inputsFromUpstream`,
+  `carryParams`, `requiredInputs`), Hirsh now **offers to run it directly** after
+  interpreting the results: it maps the upstream count matrix into the follow-up's
+  `--matrix`, carries over the annotation (`gtf`), asks only for what it can't
+  infer (the sample-condition table and the contrasts), and launches it through
+  the usual confirmed path, reusing the chosen backend/executor. Always confirmed,
+  never a silent auto-chain (`execution/followUp.ts` pure builders unit-tested;
+  `phaseFollowUp` wired).
+  - ⬜ Remaining: automated biological interpretation of the follow-up's results
+    (today it points at the report/tables), a resource pre-flight for the
+    follow-up run, and recording it in project memory.
 
 ## Phase 3 — Environment & infrastructure autonomy ✅ (shipped; Docker install stays guided)
 

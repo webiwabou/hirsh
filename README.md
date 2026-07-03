@@ -241,7 +241,9 @@ HTML reports (open them in your browser):
   context of your objective — revisiting any design caveats flagged before the run
   (e.g. a batch effect) and ending with a concrete next step. It can also write a
   paste-ready **methods paragraph** (`METHODS.md`) with the exact
-  pipeline/Nextflow/tool versions and citations (DOIs).
+  pipeline/Nextflow/tool versions and citations (DOIs). When the pipeline has a
+  runnable **follow-up** (e.g. rnaseq → differentialabundance), it offers to run
+  it directly on these results (see below).
 
 Every run also writes a **reproducibility bundle** into its run directory —
 `run_manifest.json` and a plain-language `PROVENANCE.md` recording the pipeline
@@ -291,6 +293,25 @@ for the target pipeline when supported). That samplesheet then feeds
 parameterization, so you skip building it by hand. The download runs only after
 your confirmation, and if there are no accessions — or you'd rather not fetch —
 Hirsh just asks for your local files instead.
+
+## Chaining the follow-up analysis
+
+Many analyses don't end at one pipeline: `rnaseq` produces **count matrices**, but
+the real question — *which genes are differentially expressed?* — is answered by
+[`nf-core/differentialabundance`](https://nf-co.re/differentialabundance) run on
+those counts. After interpreting the results, Hirsh **offers to run that follow-up
+directly**: it wires the upstream count matrix into the follow-up's `--matrix`,
+carries over the annotation (`gtf`) from your run, and asks only for what it can't
+infer — a **sample-condition table** and a **contrasts** file (which comparisons to
+test). It then runs the follow-up through the same confirmed path, reusing the
+backend/executor you already chose. It always asks first and never auto-chains; if
+an expected output or a required input is missing, it degrades gracefully and
+leaves everything prepared for you.
+
+> **Limitation.** Today Hirsh points you at the follow-up's report/tables rather
+> than interpreting them biologically the way it does the primary run, and the
+> follow-up run skips the resource pre-flight. See
+> [RECOMMENDATIONS.md](RECOMMENDATIONS.md), Phase 2.
 
 ## Resource awareness
 
