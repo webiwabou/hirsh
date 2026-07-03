@@ -74,10 +74,13 @@ parameterize → confirm → run → interpret.
     backend (Docker/Singularity/Conda/Mamba) and the executor (local/Slurm/…/AWS
     Batch) is now the same arrow-key recommended-options menu, not a numbered text
     prompt (`chooseBackend`/`chooseExecutor` delegate to `chooseWith`).
+  - ✅ **Fewer redundant intent questions.** Deterministic guards stop the intent
+    phase from over-probing (a weak model's habit): once organism + data type +
+    objective are known it proceeds to selection, and it won't re-ask a question it
+    effectively already asked (`hasEnoughContext`/`isDuplicateQuestion`, unit-tested).
   - ⬜ Remaining: apply the menu to the LLM-proposed gap-tool prompts; live-color the
     `@` fragment as it's typed and a fuller inline command/@ dropdown (today it's
-    Tab-completion); reduce redundant intent questions; and fuller free-form
-    redirection everywhere.
+    Tab-completion); and fuller free-form redirection everywhere.
 - ✅ Swappable LLM backends behind one interface: Ollama (local), Anthropic
   (Claude), and any OpenAI-compatible endpoint (Groq/Gemini/Cerebras/OpenRouter/
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
