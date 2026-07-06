@@ -119,6 +119,11 @@ import { designReviewApplies, reviewDesign, sortedObservations, worstSeverity } 
 import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
 import { chooseWith } from "./choice.js";
 import { selectPipeline } from "./pipelineSelection.js";
+import {
+  buildNfCoreTestRunCommand,
+  fetchNfCoreCatalog,
+  rankNfCorePipelines,
+} from "../pipelines/nfcoreCatalog.js";
 import type { AgentIO, ChoiceOption } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
 
@@ -341,6 +346,10 @@ export class Agent {
             ? `None of the curated pipelines really fit — ${chosen.name} is only a loose match for what you described.`
             : "I couldn't find a curated pipeline that fits your case well: " + sel.rationale,
         );
+        // Before composing from scratch, check whether an established nf-core
+        // pipeline already covers this — a real bioinformatician would reach for
+        // nf-core/atacseq before assembling one from modules.
+        if (await this.suggestEstablishedPipeline(session)) return { kind: "none" };
         const compose = await this.io.confirm(
           "Would you like me to compose one from nf-core modules instead?",
           true,
@@ -404,6 +413,145 @@ export class Agent {
     if (byName) return { kind: "pipeline", pipeline: byName };
     this.io.warn("I didn't recognize that pipeline.");
     return this.pickManually(session);
+  }
+
+  /**
+   * When no curated pipeline fits, searches the live nf-core catalog (~100
+   * production pipelines) for an established one that matches the intent and, if
+   * found, recommends it — offering to run its bundled `test` profile as a real,
+   * self-contained smoke run so the scientist can see it work. This is the
+   * co-scientist reflex: recommend the real existing pipeline before assembling
+   * one from modules. Returns true if it handled selection (the user ran a test
+   * profile, so the guided flow ends here), false to fall through to composition.
+   * Best-effort: any network/error degrades silently to composition.
+   */
+  private async suggestEstablishedPipeline(session: Session): Promise<boolean> {
+    const terms = [
+      session.query.objective,
+      session.query.dataType,
+      session.query.organism,
+      ...session.transcript.filter((t) => t.role === "user").map((t) => t.text),
+    ].filter((t): t is string => Boolean(t));
+    if (terms.length === 0) return false;
+
+    let ranked: ReturnType<typeof rankNfCorePipelines> = [];
+    try {
+      const catalog = await this.io.withSpinner("Searching the nf-core pipeline catalog", () =>
+        fetchNfCoreCatalog(),
+      );
+      ranked = rankNfCorePipelines(catalog, terms, 3).filter((r) => r.pipeline.latestRelease);
+    } catch {
+      return false; // offline or catalog unreachable → fall through to compose
+    }
+    if (ranked.length === 0) return false;
+
+    const top = ranked[0].pipeline;
+    this.io.say(
+      `There's an established nf-core pipeline that likely fits: ${top.fullName} — ${top.description}`,
+    );
+    if (ranked.length > 1) {
+      this.io.info("Other close matches:");
+      for (const r of ranked.slice(1)) this.io.info(`  • ${r.pipeline.fullName} — ${r.pipeline.description}`);
+    }
+    this.io.info(
+      `${top.fullName} isn't in my curated set yet, so I can't walk you through its parameters step by ` +
+        "step. But I can run its bundled test profile now — a self-contained smoke run on nf-core's own " +
+        "example data — so you see it execute end-to-end and produce real outputs.",
+    );
+
+    const go = await this.io.confirm(
+      `Run ${top.fullName} ${top.latestRelease}'s test profile now?`,
+      true,
+    );
+    if (!go) {
+      this.io.info(
+        `Okay. You can run it yourself with:  nextflow run ${top.fullName} -r ${top.latestRelease} ` +
+          "-profile test,docker --outdir results  — or I can compose one from modules.",
+      );
+      return false;
+    }
+    await this.runEstablishedTestProfile(session, top.fullName, top.latestRelease!, top.description);
+    return true;
+  }
+
+  /**
+   * Runs an established (not-yet-curated) nf-core pipeline's bundled `test`
+   * profile: an honest, self-contained smoke run that proves the pipeline (and
+   * the local environment) work and shows its outputs. Reuses the normal
+   * backend selection, environment gate and results interpretation.
+   */
+  private async runEstablishedTestProfile(
+    session: Session,
+    pipeline: string,
+    revision: string,
+    description: string,
+  ): Promise<void> {
+    await this.phaseEnvironment(session);
+    const engine = session.engine ?? this.config.execution.containerEngine;
+
+    const short = pipeline.split("/").pop() ?? pipeline;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const runDir = resolve(this.config.execution.workdir, `${short}-test-${ts}`);
+    const outdir = join(runDir, "results");
+    try {
+      mkdirSync(runDir, { recursive: true });
+    } catch (err) {
+      this.io.warn("Couldn't create a run directory: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+
+    this.io.info(
+      "Heads-up: the test profile uses nf-core's small example data — a check that the pipeline runs " +
+        "end-to-end and a preview of its outputs, not results on your data.",
+    );
+    if (!(await this.ensureNextflow(engine))) {
+      this.io.warn(`Can't run ${pipeline} — Nextflow or the backend isn't available.`);
+      return;
+    }
+    const extraConfigs = session.executorConfigPath ? [session.executorConfigPath] : [];
+    const command = buildNfCoreTestRunCommand({ pipeline, revision, engine, outdir, extraConfigs });
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + command.join(" "));
+    this.io.info(`Working directory: ${runDir}`);
+    const go = await this.io.confirm(`Run ${pipeline}'s test profile now?`, true, { auto: true });
+    if (!go) {
+      this.io.info(`Not running. The command is ready above (run dir: ${runDir}).`);
+      return;
+    }
+
+    this.io.heading(`Running ${pipeline} test profile (live log)`);
+    const result = await runNextflow(command, runDir, this.io, session.runEnv);
+    if (result.exitCode !== 0) {
+      this.io.warn(`${pipeline} exited with an error (code ${result.exitCode}).`);
+      if (result.errorSummary) this.io.say(result.errorSummary);
+      this.io.info(
+        `That's the pipeline's own test profile failing — likely a local environment issue (memory, ` +
+          "backend, network). The command above is reusable once resolved.",
+      );
+      return;
+    }
+    this.io.say(`${pipeline} test profile completed successfully.`);
+
+    const interpretable: InterpretablePipeline = {
+      name: pipeline,
+      title: `${description} (test profile)`,
+      results: { outputs: [{ path: ".", description: "the pipeline's outputs", kind: "directory" }] },
+    };
+    const report = gatherResults(interpretable, outdir);
+    for (const html of findHtmlReports(outdir)) {
+      if (!report.htmlReports.includes(html)) report.htmlReports.push(html);
+    }
+    if (report.outputs.some((o) => o.found)) {
+      this.showCharts(report);
+      this.io.say("\nWhat the test run produced:\n");
+      await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
+      this.io.endStream();
+      for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
+    this.io.info(
+      `To run ${pipeline} on your own data, its docs are at https://nf-co.re/${short} — or I can help you ` +
+        "curate it into Hirsh so it's a guided, first-class pipeline. Results: " + outdir,
+    );
   }
 
   /**
