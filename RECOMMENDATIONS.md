@@ -86,6 +86,24 @@ parameterize → confirm → run → interpret.
   OpenAI/local) — the last one lets a new user try Hirsh on a free tier before
   they have Claude credits
 - ✅ Extensible pipeline registry (rnaseq, sarek, proteinfamilies)
+- ✅ **Discovery beyond the curated set.** When no curated pipeline fits, Hirsh
+  searches the **live nf-core catalog** (~100 production pipelines,
+  `nf-co.re/pipelines.json`) and recommends the established one a bioinformatician
+  would reach for (e.g. `atacseq`, `methylseq`, `scrnaseq`) instead of only
+  composing from modules. It offers to run the recommended pipeline's bundled
+  `test` profile — a self-contained smoke run on nf-core's example data that
+  proves the pipeline and the local environment work and previews real outputs —
+  reusing the normal environment gate, runner and results interpreter. Honest
+  about the limit: a catalog pipeline isn't curated yet, so there's no
+  step-by-step parameterization on real data — it points at the pipeline's docs
+  and offers to curate it into Hirsh. Degrades silently to composition when
+  offline (`pipelines/nfcoreCatalog.ts`: `parseNfCoreCatalog`/`rankNfCorePipelines`/
+  `buildNfCoreTestRunCommand` pure + unit-tested; `suggestEstablishedPipeline`
+  wired into Phase B).
+  - ⬜ Remaining: synthesize a runnable definition from a catalog pipeline's
+    `nextflow_schema.json` (required params + `--input`) so it can run on the
+    scientist's **own** data, not just the test profile; and auto-promote a
+    frequently used catalog pipeline into a curated definition.
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation
 - ✅ Plain-language results summary + MultiQC pointer
@@ -535,7 +553,7 @@ The full realization: a scientific collaborator, not a command builder.
 
 - ⬜ Understands biological intent without the tool being named
 - ✅ Fetches public data from accessions on its own (SRA/ENA/GEO/… via nf-core/fetchngs → samplesheet)
-- ✅ Selects the right existing pipeline
+- ✅ Selects the right existing pipeline — from the curated set, and (when none is curated) recommends the established nf-core pipeline from the live catalog of ~100, offering to run its test profile
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
 - ✅ Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba, and installs Nextflow, Conda/Mamba and Java on a fresh machine; Docker install stays guided)

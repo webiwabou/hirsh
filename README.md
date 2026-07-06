@@ -13,9 +13,11 @@ explicit confirmation) and explains the results in plain language.
 > `proteinfamilies`) and two LLM backends (local Ollama and the Anthropic API),
 > with resource-aware execution (it checks whether your machine can actually run
 > the pipeline and adapts or advises against it). When no curated pipeline fits,
-> it can **compose a new one from the live [nf-core/modules](https://github.com/nf-core/modules)
-> catalog** and generate a pinned, nf-core-structured project (a reviewable
-> draft). See
+> it first **recommends an established nf-core pipeline** from the live catalog of
+> ~100 (e.g. `atacseq`, `methylseq`, `scrnaseq`) and can run its bundled test
+> profile to show it working; failing that, it can **compose a new one from the
+> live [nf-core/modules](https://github.com/nf-core/modules) catalog** and
+> generate a pinned, nf-core-structured project (a reviewable draft). See
 > [ARCHITECTURE.md](ARCHITECTURE.md) for the design and how to extend it, and
 > [RECOMMENDATIONS.md](RECOMMENDATIONS.md) for the roadmap toward a full
 > bioinformatics **co-scientist** (composing pipelines from nf-core modules,
@@ -277,8 +279,9 @@ HTML reports (open them in your browser):
   design (biological replication, controls, confounders/batch effects, group
   balance) and flags concerns with suggestions — advice, not a blocker.
 - **B · Selection** — picks the right curated nf-core pipeline (or honestly says
-  none applies), lets you correct it, and — if none fits — offers to **compose**
-  one from nf-core modules (see below).
+  none applies), lets you correct it, and — if none fits — **recommends an
+  established nf-core pipeline** from the live catalog (offering to run its test
+  profile as a smoke run), or **composes** one from nf-core modules (see below).
 - **Data retrieval** — if your request named public accessions (SRA/ENA/GEO/…),
   Hirsh offers to download them with nf-core/fetchngs and build the samplesheet
   before parameterization (see below).
@@ -452,10 +455,25 @@ intermediate work) and compares it to the free space — warning you if disk is
 tight and refusing to silently start a run that would run out of space. (Docker
 manages its own image store; on a cluster/cloud executor this check is skipped.)
 
+## Discovering an established nf-core pipeline
+
+Hirsh curates a few pipelines in depth, but nf-core ships ~100. When no curated
+pipeline fits, Hirsh first searches the **live nf-core catalog**
+(`nf-co.re/pipelines.json`) for the established pipeline that matches your intent —
+the one a bioinformatician would reach for (e.g. `atacseq`, `methylseq`,
+`scrnaseq`, `ampliseq`, `taxprofiler`). It recommends the best match and offers to
+run its **bundled `test` profile**: a self-contained smoke run on nf-core's own
+example data that proves the pipeline and your environment work and previews its
+real outputs. A catalog pipeline isn't curated yet — so there's no step-by-step
+parameterization on your own data — but Hirsh points at its docs and can help you
+curate it. Only if this doesn't fit does it fall back to composing one from
+modules (below).
+
 ## Composing a pipeline from nf-core modules
 
-If no curated pipeline fits your request (or you type `compose` at the selection
-step), Hirsh builds one from real [nf-core/modules](https://github.com/nf-core/modules):
+If no curated *or* established pipeline fits your request (or you type `compose`
+at the selection step), Hirsh builds one from real
+[nf-core/modules](https://github.com/nf-core/modules):
 
 1. It resolves the current `nf-core/modules` commit and searches the live catalog
    (~1,900 modules) for candidates matching your intent.

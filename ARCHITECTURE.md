@@ -39,6 +39,7 @@ src/
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
 │   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
+│   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
@@ -152,6 +153,19 @@ adapter, check whether the service is OpenAI-compatible — if so, the existing
   returns an `ok` / `adapt` / `refuse` verdict. `stateMachine.ts` runs this
   pre-flight in Phase D; adapting sets `--max_memory`/`--max_cpus` and
   regenerates the command. Skipped for the test profile.
+- **Established-pipeline recommendation (Phase B fallback).** Before composing,
+  when Phase B finds no curated match, `stateMachine.ts::suggestEstablishedPipeline`
+  searches the live nf-core catalog (`pipelines/nfcoreCatalog.ts`: fetch+cache
+  `nf-co.re/pipelines.json`, drop archived, pick latest stable release; pure
+  `parseNfCoreCatalog`/`rankNfCorePipelines` token-ranked over name/topics/
+  description) for a real production pipeline (e.g. `atacseq`). It recommends the
+  best match and offers to run its bundled `test` profile as a self-contained
+  smoke run (`buildNfCoreTestRunCommand` → `nextflow run <name> -r <rel> -profile
+  test,<engine>`), reusing the normal environment gate, `runNextflow` and the
+  results interpreter. It's honest that a catalog pipeline isn't curated (no
+  step-by-step parameterization yet); degrades silently to composition when
+  offline. This is the co-scientist reflex — reach for the established pipeline a
+  bioinformatician would know before assembling one from scratch.
 - **Composition from nf-core modules (Phase F4).** When Phase B finds no curated
   pipeline, `stateMachine.ts` runs a compose branch: `modules/registry.ts` tracks
   [nf-core/modules](https://github.com/nf-core/modules) live (resolve commit →
