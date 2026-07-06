@@ -124,6 +124,13 @@ import {
   fetchNfCoreCatalog,
   rankNfCorePipelines,
 } from "../pipelines/nfcoreCatalog.js";
+import {
+  fetchSynthesizedSpec,
+  isSimpleFastqSheet,
+  toColumnSpecs,
+  type InputColumn,
+  type SynthParam,
+} from "../pipelines/nfcoreSchema.js";
 import type { AgentIO, ChoiceOption } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
 
@@ -454,24 +461,252 @@ export class Agent {
       for (const r of ranked.slice(1)) this.io.info(`  • ${r.pipeline.fullName} — ${r.pipeline.description}`);
     }
     this.io.info(
-      `${top.fullName} isn't in my curated set yet, so I can't walk you through its parameters step by ` +
-        "step. But I can run its bundled test profile now — a self-contained smoke run on nf-core's own " +
-        "example data — so you see it execute end-to-end and produce real outputs.",
+      `${top.fullName} isn't in my curated set yet, but I can still run it: on your own data (I'll read ` +
+        "its input spec and ask only for the samplesheet and references it needs), or its bundled test " +
+        "profile as a quick smoke run on nf-core's example data.",
     );
 
-    const go = await this.io.confirm(
-      `Run ${top.fullName} ${top.latestRelease}'s test profile now?`,
-      true,
+    const choice = await chooseWith(
+      this.io,
+      `How would you like to proceed with ${top.fullName}?`,
+      [
+        {
+          label: "Run it on my own data",
+          value: "data",
+          description: "I fetch its input spec and ask for the samplesheet + references it needs",
+          recommended: true,
+        },
+        {
+          label: "Run its test profile",
+          value: "test",
+          description: `Smoke run on nf-core's example data (${top.latestRelease})`,
+        },
+        {
+          label: "Compose one from modules instead",
+          value: "compose",
+          description: "Build a custom pipeline from nf-core/modules",
+        },
+      ],
+      { allowCustom: false },
     );
-    if (!go) {
-      this.io.info(
-        `Okay. You can run it yourself with:  nextflow run ${top.fullName} -r ${top.latestRelease} ` +
-          "-profile test,docker --outdir results  — or I can compose one from modules.",
-      );
-      return false;
+
+    if (choice === "compose") return false; // caller offers composition
+    if (choice === "data" && (await this.runEstablishedOnData(session, top.fullName, top.latestRelease!, top.description))) {
+      return true;
     }
+    // Explicit "test", or the on-data path couldn't fetch the schema — smoke run.
     await this.runEstablishedTestProfile(session, top.fullName, top.latestRelease!, top.description);
     return true;
+  }
+
+  /**
+   * Runs an established (not-yet-curated) nf-core pipeline on the scientist's own
+   * data by synthesizing a short parameter interview from the pipeline's own
+   * schemas: it builds/validates the samplesheet against the real column spec and
+   * asks only for the references the pipeline needs, then runs it through the
+   * normal environment gate, runner and interpreter. Returns true once it has
+   * taken over (even if the user skips the input); false only when the schema is
+   * unreachable, so the caller can fall back to the test profile.
+   */
+  private async runEstablishedOnData(
+    session: Session,
+    pipeline: string,
+    revision: string,
+    description: string,
+  ): Promise<boolean> {
+    const spec = await this.io.withSpinner("Fetching the pipeline's input spec", () =>
+      fetchSynthesizedSpec(pipeline, revision),
+    );
+    if (!spec) {
+      this.io.warn(`Couldn't read ${pipeline}'s schema (network?). I'll offer its test profile instead.`);
+      return false;
+    }
+
+    await this.phaseEnvironment(session);
+    const engine = session.engine ?? this.config.execution.containerEngine;
+
+    const short = pipeline.split("/").pop() ?? pipeline;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const runDir = resolve(this.config.execution.workdir, `${short}-${ts}`);
+    const outdir = join(runDir, "results");
+    try {
+      mkdirSync(runDir, { recursive: true });
+    } catch (err) {
+      this.io.warn("Couldn't create a run directory: " + (err instanceof Error ? err.message : String(err)));
+      return true;
+    }
+
+    const sheet = await this.prepareSchemaSamplesheet(runDir, spec.columns);
+    if (!sheet) {
+      this.io.info(
+        `Without a samplesheet I can't run ${pipeline} on your data. Its input format is documented at ` +
+          `https://nf-co.re/${short}/${revision}/docs/usage — prepare one and re-run, or ask me for its test profile.`,
+      );
+      return true;
+    }
+
+    const params: Record<string, string | number | boolean> = { input: sheet, outdir };
+    // Ask required params first, then the iGenomes `genome` key (which, if given,
+    // covers the FASTA/GTF/index references), then any remaining references.
+    const required = spec.params.filter((p) => p.required && p.name !== "input" && p.name !== "outdir");
+    const genomeParam = spec.params.find((p) => p.name === "genome" && !p.required);
+    const others = spec.params.filter((p) => !p.required && p.name !== "genome");
+    const ordered = [...required, ...(genomeParam ? [genomeParam] : []), ...others];
+    let genomeGiven = false;
+    for (const p of ordered) {
+      if (p.name in params) continue;
+      if (genomeGiven && p.reference && p.name !== "genome") continue; // covered by the iGenomes key
+      const value = await this.askSchemaParam(p);
+      if (value === undefined || value === "") {
+        if (p.required) {
+          this.io.warn(`${p.name} is required by ${pipeline}; not running. Inputs are prepared in ${runDir}.`);
+          return true;
+        }
+        continue;
+      }
+      params[p.name] = value;
+      if (p.name === "genome") genomeGiven = true;
+    }
+
+    const paramsPath = join(runDir, "params.yaml");
+    try {
+      writeFileSync(paramsPath, stringifyYaml(params), "utf8");
+    } catch (err) {
+      this.io.warn("Couldn't write params.yaml: " + (err instanceof Error ? err.message : String(err)));
+      return true;
+    }
+    this.io.info(
+      "Note: I'm running this from its schema, not a curated recipe — I ask for required inputs and " +
+        "references and leave optional settings at nf-core's defaults. Review params.yaml if you want to tune it.",
+    );
+
+    if (!(await this.ensureNextflow(engine))) {
+      this.io.warn(`Can't run ${pipeline} — Nextflow or the backend isn't available. Inputs are in ${runDir}.`);
+      return true;
+    }
+    const extraConfigs = session.executorConfigPath ? [session.executorConfigPath] : [];
+    const command = buildFollowUpCommand({ pipeline, revision, engine, paramsFile: paramsPath, extraConfigs });
+    this.io.say("Command to run:");
+    this.io.say("  nextflow " + command.join(" "));
+    this.io.info(`Working directory: ${runDir}`);
+    const go = await this.io.confirm(`Run ${pipeline} now?`, false, { consequential: true });
+    if (!go) {
+      this.io.info(`Not running. The command and params.yaml are ready in ${runDir}.`);
+      return true;
+    }
+
+    this.io.heading(`Running ${pipeline} (live log)`);
+    const result = await runNextflow(command, runDir, this.io, session.runEnv);
+    if (result.exitCode !== 0) {
+      this.io.warn(`${pipeline} exited with an error (code ${result.exitCode}).`);
+      if (result.errorSummary) this.io.say(result.errorSummary);
+      this.io.info(`Inputs are preserved in ${runDir}; see https://nf-co.re/${short} for its parameters.`);
+      return true;
+    }
+    this.io.say(`${pipeline} completed successfully.`);
+    await this.interpretDirectoryRun(session, pipeline, `${description} (on your data)`, outdir);
+    this.io.info(
+      `Results: ${outdir}. If ${pipeline} is a keeper, I can help you curate it into Hirsh as a ` +
+        "first-class, guided pipeline.",
+    );
+    return true;
+  }
+
+  /** Asks for one synthesized parameter: an enum via the menu, else a path/value. */
+  private async askSchemaParam(param: SynthParam): Promise<string | number | undefined> {
+    if (param.kind === "enum" && param.choices && param.choices.length > 0) {
+      const options: ChoiceOption[] = param.choices.map((c) => ({
+        label: c,
+        value: c,
+        recommended: String(param.default) === c,
+      }));
+      const label = `${param.name}${param.description ? ` — ${param.description}` : ""}`;
+      const v = await chooseWith(this.io, label, options, { allowCustom: false });
+      return v || undefined;
+    }
+    const tag = param.required ? "" : param.reference ? " (reference — Enter to skip)" : " (optional — Enter to skip)";
+    const prompt =
+      `${param.name}${tag}` + (param.description ? `\n  ${param.description}` : "") + `\n  ${param.name}:`;
+    const v = await this.askComposedPath(prompt);
+    if (!v) return undefined;
+    if (param.kind === "number") {
+      const n = Number(v);
+      return Number.isNaN(n) ? v : n;
+    }
+    return v;
+  }
+
+  /**
+   * Prepares a samplesheet for a schema-synthesized run. When the required
+   * columns are only sample + FASTQ, Hirsh builds one from a folder (its pair
+   * inference) or accepts a CSV; otherwise it asks for a ready CSV and validates
+   * it against the real column spec (so it never guesses per-sample biology).
+   */
+  private async prepareSchemaSamplesheet(
+    runDir: string,
+    columns: InputColumn[],
+  ): Promise<string | null> {
+    if (columns.length > 0) {
+      const shown = columns.map((c) => `${c.name}${c.required ? "*" : ""}`).join(", ");
+      this.io.info(`Samplesheet columns (* required): ${shown}.`);
+    }
+    if (columns.length === 0 || isSimpleFastqSheet(columns)) {
+      const path = await this.resolveComposedInput(runDir);
+      return path || null;
+    }
+    this.io.info(
+      "This pipeline needs extra per-sample columns, so I won't guess them — point me at a ready " +
+        "samplesheet CSV with those columns.",
+    );
+    const p = await this.askComposedPath("Path to your samplesheet CSV (@path, or Enter to skip):");
+    if (!p) return null;
+    if (!existsSync(p)) {
+      this.io.warn(`I couldn't find ${p}.`);
+      return null;
+    }
+    let text: string;
+    try {
+      text = readFileSync(p, "utf8");
+    } catch (err) {
+      this.io.warn("Couldn't read that file: " + (err instanceof Error ? err.message : String(err)));
+      return null;
+    }
+    const report = validateSamplesheetContent(text, toColumnSpecs(columns));
+    for (const w of report.warnings) this.io.warn(w);
+    if (!report.ok) {
+      this.io.warn("That samplesheet doesn't match the pipeline's columns:");
+      for (const e of report.errors) this.io.warn(`  • ${e}`);
+      return null;
+    }
+    this.io.info(`Samplesheet accepted (${report.rowCount} row(s)).`);
+    return p;
+  }
+
+  /** Interprets an ad-hoc run's output directory (shared by test-profile/on-data runs). */
+  private async interpretDirectoryRun(
+    session: Session,
+    name: string,
+    title: string,
+    outdir: string,
+  ): Promise<void> {
+    const interpretable: InterpretablePipeline = {
+      name,
+      title,
+      results: { outputs: [{ path: ".", description: "the pipeline's outputs", kind: "directory" }] },
+    };
+    const report = gatherResults(interpretable, outdir);
+    for (const html of findHtmlReports(outdir)) {
+      if (!report.htmlReports.includes(html)) report.htmlReports.push(html);
+    }
+    if (!report.outputs.some((o) => o.found)) {
+      this.io.info(`Results are in ${outdir}.`);
+      return;
+    }
+    this.showCharts(report);
+    this.io.say("\nResults summary:\n");
+    await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
+    this.io.endStream();
+    for (const html of report.htmlReports) this.io.info(`  • ${html}`);
   }
 
   /**
@@ -531,23 +766,7 @@ export class Agent {
       return;
     }
     this.io.say(`${pipeline} test profile completed successfully.`);
-
-    const interpretable: InterpretablePipeline = {
-      name: pipeline,
-      title: `${description} (test profile)`,
-      results: { outputs: [{ path: ".", description: "the pipeline's outputs", kind: "directory" }] },
-    };
-    const report = gatherResults(interpretable, outdir);
-    for (const html of findHtmlReports(outdir)) {
-      if (!report.htmlReports.includes(html)) report.htmlReports.push(html);
-    }
-    if (report.outputs.some((o) => o.found)) {
-      this.showCharts(report);
-      this.io.say("\nWhat the test run produced:\n");
-      await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
-      this.io.endStream();
-      for (const html of report.htmlReports) this.io.info(`  • ${html}`);
-    }
+    await this.interpretDirectoryRun(session, pipeline, `${description} (test profile)`, outdir);
     this.io.info(
       `To run ${pipeline} on your own data, its docs are at https://nf-co.re/${short} — or I can help you ` +
         "curate it into Hirsh so it's a guided, first-class pipeline. Results: " + outdir,
