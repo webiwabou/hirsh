@@ -14,10 +14,12 @@ explicit confirmation) and explains the results in plain language.
 > with resource-aware execution (it checks whether your machine can actually run
 > the pipeline and adapts or advises against it). When no curated pipeline fits,
 > it first **recommends an established nf-core pipeline** from the live catalog of
-> ~100 (e.g. `atacseq`, `methylseq`, `scrnaseq`) and can run its bundled test
-> profile to show it working; failing that, it can **compose a new one from the
-> live [nf-core/modules](https://github.com/nf-core/modules) catalog** and
-> generate a pinned, nf-core-structured project (a reviewable draft). See
+> ~100 (e.g. `atacseq`, `methylseq`, `scrnaseq`) and can **run it on your own
+> data** — reading the pipeline's own schema to ask only for the samplesheet and
+> references it needs — or run its bundled test profile; failing that, it can
+> **compose a new one from the live
+> [nf-core/modules](https://github.com/nf-core/modules) catalog** and generate a
+> pinned, nf-core-structured project (a reviewable draft). See
 > [ARCHITECTURE.md](ARCHITECTURE.md) for the design and how to extend it, and
 > [RECOMMENDATIONS.md](RECOMMENDATIONS.md) for the roadmap toward a full
 > bioinformatics **co-scientist** (composing pipelines from nf-core modules,
@@ -461,13 +463,23 @@ Hirsh curates a few pipelines in depth, but nf-core ships ~100. When no curated
 pipeline fits, Hirsh first searches the **live nf-core catalog**
 (`nf-co.re/pipelines.json`) for the established pipeline that matches your intent —
 the one a bioinformatician would reach for (e.g. `atacseq`, `methylseq`,
-`scrnaseq`, `ampliseq`, `taxprofiler`). It recommends the best match and offers to
-run its **bundled `test` profile**: a self-contained smoke run on nf-core's own
-example data that proves the pipeline and your environment work and previews its
-real outputs. A catalog pipeline isn't curated yet — so there's no step-by-step
-parameterization on your own data — but Hirsh points at its docs and can help you
-curate it. Only if this doesn't fit does it fall back to composing one from
-modules (below).
+`scrnaseq`, `ampliseq`, `taxprofiler`) — and offers three ways forward:
+
+- **Run it on your own data.** Hirsh reads the pipeline's own schemas
+  (`nextflow_schema.json` + `assets/schema_input.json`) and asks only for what it
+  needs: it builds the samplesheet from a folder of reads when the columns are
+  simple (sample + FASTQ), or validates a CSV you provide against the pipeline's
+  real column spec (so it never guesses per-sample fields like `replicate`); then
+  it asks for the references (offering the iGenomes `genome` key first, which
+  covers FASTA/GTF), leaves optional settings at nf-core's defaults, writes
+  `params.yaml` and runs it. It's honest that this is schema-driven, not a curated
+  recipe — review `params.yaml` to tune it.
+- **Run its `test` profile.** A self-contained smoke run on nf-core's example data
+  that proves the pipeline and your environment work and previews its outputs.
+- **Compose one from modules** instead (below).
+
+If a catalog pipeline becomes a keeper, Hirsh can help you curate it into a
+first-class, guided pipeline.
 
 ## Composing a pipeline from nf-core modules
 

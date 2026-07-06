@@ -40,6 +40,7 @@ src/
 │   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits
+│   ├── (pipelines/nfcoreSchema.ts)   synthesize a param interview + samplesheet columns from a catalog pipeline's own schemas (run it on real data)
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
@@ -159,13 +160,24 @@ adapter, check whether the service is OpenAI-compatible — if so, the existing
   `nf-co.re/pipelines.json`, drop archived, pick latest stable release; pure
   `parseNfCoreCatalog`/`rankNfCorePipelines` token-ranked over name/topics/
   description) for a real production pipeline (e.g. `atacseq`). It recommends the
-  best match and offers to run its bundled `test` profile as a self-contained
-  smoke run (`buildNfCoreTestRunCommand` → `nextflow run <name> -r <rel> -profile
-  test,<engine>`), reusing the normal environment gate, `runNextflow` and the
-  results interpreter. It's honest that a catalog pipeline isn't curated (no
-  step-by-step parameterization yet); degrades silently to composition when
-  offline. This is the co-scientist reflex — reach for the established pipeline a
-  bioinformatician would know before assembling one from scratch.
+  best match and offers three paths (`chooseWith`): **run on my own data**, **run
+  the test profile**, or **compose**. The test profile is a self-contained smoke
+  run (`buildNfCoreTestRunCommand` → `nextflow run <name> -r <rel> -profile
+  test,<engine>`). The on-data path (`runEstablishedOnData`) synthesizes a short
+  interview from the pipeline's *own* schemas (`pipelines/nfcoreSchema.ts`:
+  `fetchSynthesizedSpec` fetches `nextflow_schema.json` + `assets/schema_input.json`;
+  `synthesizeSchemaParams` keeps required params + references + the `genome` key
+  and drops the optional tail; `parseInputSchema`/`isSimpleFastqSheet` derive the
+  samplesheet columns) — it builds the sheet from a folder when columns are simple
+  (sample + FASTQ) or validates a user CSV against the real column spec
+  (`validateSamplesheetContent`), asks only for what's needed (offering the
+  iGenomes `genome` key first to cover FASTA/GTF/index prompts), writes
+  `params.yaml` and runs via `buildFollowUpCommand`. Both paths reuse the normal
+  environment gate, `runNextflow` and the shared `interpretDirectoryRun`. It's
+  honest that a catalog pipeline is schema-driven, not curated; degrades to the
+  test profile if the schema is unreachable and to composition when offline. This
+  is the co-scientist reflex — reach for the established pipeline a bioinformatician
+  would know before assembling one from scratch.
 - **Composition from nf-core modules (Phase F4).** When Phase B finds no curated
   pipeline, `stateMachine.ts` runs a compose branch: `modules/registry.ts` tracks
   [nf-core/modules](https://github.com/nf-core/modules) live (resolve commit →

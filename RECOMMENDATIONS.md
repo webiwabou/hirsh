@@ -100,10 +100,26 @@ parameterize → confirm → run → interpret.
   offline (`pipelines/nfcoreCatalog.ts`: `parseNfCoreCatalog`/`rankNfCorePipelines`/
   `buildNfCoreTestRunCommand` pure + unit-tested; `suggestEstablishedPipeline`
   wired into Phase B).
-  - ⬜ Remaining: synthesize a runnable definition from a catalog pipeline's
-    `nextflow_schema.json` (required params + `--input`) so it can run on the
-    scientist's **own** data, not just the test profile; and auto-promote a
-    frequently used catalog pipeline into a curated definition.
+- ✅ **Run a catalog pipeline on your own data (schema-synthesized).** A
+  recommended catalog pipeline is no longer test-profile-only: Hirsh reads the
+  pipeline's **own schemas** (`nextflow_schema.json` + `assets/schema_input.json`)
+  and synthesizes a short parameter interview — it builds the samplesheet from a
+  folder when the required columns are just sample + FASTQ, otherwise asks for a
+  ready CSV and **validates it against the real column spec** (never guessing
+  per-sample biology like `replicate`/`condition`); it asks only for required
+  params and references, offering the iGenomes `genome` key first (which then
+  covers the FASTA/GTF/index prompts) and leaving optional settings at nf-core's
+  defaults. Then it writes `params.yaml` and runs through the normal environment
+  gate, runner and results interpreter — honest that it's schema-driven, not a
+  curated recipe. So any of the ~100 nf-core pipelines is runnable on real data,
+  not just the 3 curated ones (`pipelines/nfcoreSchema.ts`:
+  `synthesizeSchemaParams`/`parseInputSchema`/`isSimpleFastqSheet` pure +
+  unit-tested, verified live against atacseq/scrnaseq/methylseq/ampliseq/
+  taxprofiler; `runEstablishedOnData` wired).
+  - ⬜ Remaining: honor `dependentRequired`/conditional-required params and
+    param-level `pattern` validation; a resource pre-flight for a catalog run
+    (no curated per-process model exists for it); and auto-promote a frequently
+    used catalog pipeline into a full curated definition.
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation
 - ✅ Plain-language results summary + MultiQC pointer
@@ -553,7 +569,7 @@ The full realization: a scientific collaborator, not a command builder.
 
 - ⬜ Understands biological intent without the tool being named
 - ✅ Fetches public data from accessions on its own (SRA/ENA/GEO/… via nf-core/fetchngs → samplesheet)
-- ✅ Selects the right existing pipeline — from the curated set, and (when none is curated) recommends the established nf-core pipeline from the live catalog of ~100, offering to run its test profile
+- ✅ Selects the right existing pipeline — from the curated set, and (when none is curated) recommends the established nf-core pipeline from the live catalog of ~100 and runs it on the scientist's own data via a schema-synthesized interview (or its test profile)
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
 - ✅ Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba, and installs Nextflow, Conda/Mamba and Java on a fresh machine; Docker install stays guided)
