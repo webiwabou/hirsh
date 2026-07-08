@@ -11,6 +11,7 @@ import { resolve } from "node:path";
 import chalk from "chalk";
 import { resolveWorkspace } from "./workspace.js";
 import { runInit } from "./init.js";
+import { formatRunsTable, listRuns } from "./runsList.js";
 import { ConfigError, loadConfig } from "../config/loadConfig.js";
 import type { HirshConfig } from "../config/types.js";
 import { createProvider, ProviderError, type LLMProvider } from "../llm/index.js";
@@ -76,11 +77,31 @@ function handleInit(args: string[]): void {
   );
 }
 
+/** `hirsh runs` — list the runs recorded in the current workspace. */
+function handleRuns(): void {
+  let workdir = "./runs";
+  try {
+    workdir = loadConfig().config.execution.workdir;
+  } catch {
+    /* fall back to ./runs */
+  }
+  process.stdout.write(chalk.bold(`\nRuns in ${resolve(workdir)}\n\n`));
+  process.stdout.write(formatRunsTable(listRuns(resolve(workdir))) + "\n");
+}
+
 async function main(): Promise<void> {
   // --- Subcommands ---
   const argv = process.argv.slice(2);
   if (argv[0] === "init") {
     handleInit(argv);
+    return;
+  }
+  if (argv[0] === "runs") {
+    const ws = resolveWorkspace(argv.slice(1), process.env, process.cwd());
+    if (ws.source !== "cwd" && existsSync(ws.path) && statSync(ws.path).isDirectory()) {
+      process.chdir(ws.path);
+    }
+    handleRuns();
     return;
   }
 
