@@ -16,6 +16,18 @@ import type { DesignObservation } from "./designReview.js";
 const GROUP_COLUMN_RE =
   /^(condition|group|treatment|genotype|status|timepoint|time_?point|dose|cohort|phenotype|cell_?type|tissue|sample_?group|class|label|disease|state|arm)$/i;
 
+/** Group values that read as a control / reference level. */
+const CONTROL_RE =
+  /^(control|ctrl|untreated|vehicle|dmso|mock|wt|wild[\s_-]?type|wildtype|baseline|normal|reference|ref|healthy|placebo|naive|na[iï]ve|parental|uninfected|unstim(ulated)?|day[\s_-]?0|t0|d0|0h)$/i;
+
+/**
+ * The group that reads as the control/reference level (untreated, vehicle, WT,
+ * normal, baseline…), or null if none is recognizable. Pure. Case-insensitive.
+ */
+export function detectControlGroup(groups: string[]): string | null {
+  return groups.find((g) => CONTROL_RE.test(g.trim())) ?? null;
+}
+
 export interface GroupCount {
   group: string;
   replicates: number;
@@ -125,6 +137,19 @@ export function reviewSamplesheetContent(
       topic: "balance",
       message: `Group sizes are unbalanced (largest ${max} vs smallest ${min}); this can bias comparisons and reduce power for the smaller group.`,
       suggestion: "Balance the groups where possible, or account for the imbalance in the analysis.",
+    });
+  }
+
+  // No recognizable control/reference among the groups: differential comparisons
+  // need a clear reference level, so flag it (gently — a valid design may just use
+  // an unlabeled reference such as an early timepoint).
+  if (detectControlGroup(groupCounts.map((g) => g.group)) === null) {
+    observations.push({
+      severity: "caution",
+      topic: "controls",
+      message: `None of the groups (${groupCounts.map((g) => g.group).join(", ")}) looks like a control/reference (e.g. untreated, vehicle, WT, normal).`,
+      suggestion:
+        "Make sure a reference level is defined for each comparison — add or identify a control group, or set the reference explicitly in the contrasts.",
     });
   }
 
