@@ -117,7 +117,13 @@ import { initAndCommit, isGitAvailable } from "../execution/git.js";
 import { checkGhCli, createGitHubRepo } from "../execution/publish.js";
 import { extractIntent, hasEnoughContext, isDuplicateQuestion } from "./intentExtraction.js";
 import { fillParameters, finalizeCommand, type MemorySuggestions } from "./parameterFilling.js";
-import { designReviewApplies, reviewDesign, sortedObservations, worstSeverity } from "./designReview.js";
+import {
+  designReviewApplies,
+  reviewDesign,
+  worstSeverity,
+  type DesignObservation,
+} from "./designReview.js";
+import { reviewSamplesheetContent } from "./samplesheetReview.js";
 import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
 import { chooseWith } from "./choice.js";
 import { selectPipeline } from "./pipelineSelection.js";
@@ -222,6 +228,10 @@ export class Agent {
       this.memorySuggestions(session.query),
     );
 
+    // Scientific dialogue, now grounded in the actual samplesheet (per-group
+    // replicate counts, balance) — complements the pre-run design review.
+    this.reviewBuiltSamplesheet(session);
+
     let executed = await this.phaseConfirmAndRun(session, runDir);
     if (executed) {
       await this.phaseResults(session, pipeline);
@@ -318,13 +328,7 @@ export class Agent {
     session.designReview = review; // carried into results interpretation (Phase E)
     this.io.heading("Experimental design review");
     if (review.summary) this.io.say(review.summary);
-    for (const o of sortedObservations(review)) {
-      const tag = o.severity === "risk" ? "⚠ risk" : o.severity === "caution" ? "caution" : "note";
-      const line = `  ${tag} [${o.topic}]: ${o.message}`;
-      if (o.severity === "info") this.io.info(line);
-      else this.io.warn(line);
-      if (o.suggestion) this.io.info(`       suggestion: ${o.suggestion}`);
-    }
+    this.presentObservations(review.observations);
 
     const worst = worstSeverity(review);
     if (worst === "risk" || worst === "caution") {
@@ -335,6 +339,54 @@ export class Agent {
       return this.io.confirm("Continue to pipeline selection?", true);
     }
     return true;
+  }
+
+  /** Renders design observations (most serious first), warnings for caution/risk. */
+  private presentObservations(observations: DesignObservation[]): void {
+    const order: Record<DesignObservation["severity"], number> = { risk: 0, caution: 1, info: 2 };
+    for (const o of [...observations].sort((a, b) => order[a.severity] - order[b.severity])) {
+      const tag = o.severity === "risk" ? "⚠ risk" : o.severity === "caution" ? "caution" : "note";
+      const line = `  ${tag} [${o.topic}]: ${o.message}`;
+      if (o.severity === "info") this.io.info(line);
+      else this.io.warn(line);
+      if (o.suggestion) this.io.info(`       suggestion: ${o.suggestion}`);
+    }
+  }
+
+  /**
+   * Scientific dialogue, grounded in the built samplesheet: counts biological
+   * replicates per group and raises concrete concerns (no replication, the bare
+   * minimum of two, unbalanced groups) that the description-based review can't
+   * see. Advisory — the run confirmation that follows is the decision point. Merges
+   * its observations into `session.designReview` so they carry into interpretation.
+   */
+  private reviewBuiltSamplesheet(session: Session): void {
+    if (!session.samplesheetPath) return;
+    let text: string;
+    try {
+      text = readFileSync(session.samplesheetPath, "utf8");
+    } catch {
+      return;
+    }
+    const design = reviewSamplesheetContent(text);
+    if (design.observations.length === 0) return;
+
+    const worst = worstSeverity({ observations: design.observations, summary: "" });
+    if (worst === "info") {
+      // Nothing concerning — just confirm the design we see (positive feedback).
+      for (const o of design.observations) this.io.info(o.message);
+    } else {
+      this.io.heading("Samplesheet design check");
+      this.presentObservations(design.observations);
+      this.io.info("This is advice, not a blocker — you decide at the run confirmation below.");
+    }
+
+    // Carry into interpretation (Phase E revisits these against the results).
+    const existing = session.designReview ?? { observations: [], summary: "" };
+    session.designReview = {
+      summary: existing.summary,
+      observations: [...existing.observations, ...design.observations],
+    };
   }
 
   /** Phase B — select the pipeline and allow user correction. */
