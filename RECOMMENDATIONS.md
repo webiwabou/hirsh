@@ -312,8 +312,12 @@ negotiation and container/data staging are in; full toolchain bootstrapping
   index/reference (or an iGenomes key), that step's memory floor is dropped from
   the assessment — so rnaseq on a 30 GB machine *refuses* when it must build the
   index but is *fine* when `--genome`/a STAR index is provided.
-  - ⬜ Remaining: read real per-process peaks from Nextflow trace/execution reports
-    instead of curated estimates.
+  - ✅ **Reads real peak memory from the trace.** After a run, Hirsh parses the
+    execution trace's `peak_rss` (base-1024) and reports the run's overall peak and
+    heaviest process, so the scientist sizes future runs from real usage
+    (`results/parsers.ts::parseTraceResources`, pure/unit-tested; surfaced in Phase E).
+  - ⬜ Remaining: feed the observed peaks back into the pre-flight model (via
+    project memory) so the *next* run's estimate uses real usage, not curated numbers.
 - ✅ **Executor abstraction.** Before a run Hirsh asks *where* to run — local
   machine, an HPC scheduler (Slurm/SGE/LSF/PBS) or AWS Batch — and writes a small
   Nextflow `-c` config that sets `process.executor` (+ queue, and region/S3 work
