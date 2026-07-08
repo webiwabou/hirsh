@@ -117,9 +117,29 @@ parameterize → confirm → run → interpret.
   unit-tested, verified live against atacseq/scrnaseq/methylseq/ampliseq/
   taxprofiler; `runEstablishedOnData` wired).
   - ⬜ Remaining: honor `dependentRequired`/conditional-required params and
-    param-level `pattern` validation; a resource pre-flight for a catalog run
-    (no curated per-process model exists for it); and auto-promote a frequently
-    used catalog pipeline into a full curated definition.
+    param-level `pattern` validation; and a resource pre-flight for a catalog run
+    (no curated per-process model exists for it).
+- ✅ **Auto-curate a catalog pipeline (Hirsh learns pipelines).** After running a
+  catalog pipeline, Hirsh offers to **curate it into a persistent definition** so
+  it becomes a first-class, guided pipeline next session — not schema-driven each
+  time. It generates a full `PipelineDefinition` YAML from the pipeline's schema +
+  catalog metadata (params with enum choices, samplesheet columns, a `test`
+  profile) and writes it to a **user definitions directory** (`~/.bioagent/
+  pipelines`), which the registry now loads alongside the bundled curated ones (a
+  hand-curated definition wins on a name clash; a broken user file can't sink
+  startup). The write is validated by reloading the registry (removed if it
+  doesn't load), and the file carries an honest "auto-generated, NOT hand-curated"
+  header naming what to refine (result output paths, resources, citation DOI). So
+  the curated set **grows itself** as the scientist uses pipelines
+  (`pipelines/synthDefinition.ts`: `buildSynthesizedDefinition`/
+  `renderDefinitionYaml`/`definitionFileName` pure + unit-tested;
+  `registry.ts::userDefinitionsDir`/`invalidateRegistryCache`; `offerCuration`
+  wired; verified end-to-end that atacseq curated from its live schema loads as a
+  guided pipeline).
+  - ⬜ Remaining: refine a curated definition's `results.outputs` automatically
+    (learn real output paths from a completed run's directory) and add a
+    resources block from the pipeline's config; let the scientist edit a curated
+    definition through Hirsh.
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation
 - ✅ Plain-language results summary + MultiQC pointer
@@ -569,7 +589,7 @@ The full realization: a scientific collaborator, not a command builder.
 
 - ⬜ Understands biological intent without the tool being named
 - ✅ Fetches public data from accessions on its own (SRA/ENA/GEO/… via nf-core/fetchngs → samplesheet)
-- ✅ Selects the right existing pipeline — from the curated set, and (when none is curated) recommends the established nf-core pipeline from the live catalog of ~100 and runs it on the scientist's own data via a schema-synthesized interview (or its test profile)
+- ✅ Selects the right existing pipeline — from the curated set, and (when none is curated) recommends the established nf-core pipeline from the live catalog of ~100 and runs it on the scientist's own data via a schema-synthesized interview (or its test profile); it can then **curate that pipeline** so the guided set grows itself
 - ✅ Composes a new pipeline from nf-core modules when none fits (runs via stub; complex DAGs still benefit from review)
 - 🔵 Negotiates compute (adapt / relocate / provision) with rough cost & time estimates (live pricing and real runtime estimates next)
 - ✅ Sets up its own toolchain & environment (picks Docker/Singularity/Conda/Mamba, and installs Nextflow, Conda/Mamba and Java on a fresh machine; Docker install stays guided)

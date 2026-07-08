@@ -41,6 +41,7 @@ src/
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits
 │   ├── (pipelines/nfcoreSchema.ts)   synthesize a param interview + samplesheet columns from a catalog pipeline's own schemas (run it on real data)
+│   ├── (pipelines/synthDefinition.ts) auto-curate a catalog pipeline into a persistent registry definition (learns pipelines into ~/.bioagent/pipelines)
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
@@ -239,7 +240,11 @@ into already exist:
 - **`AgentIO`** lets a future TUI/web frontend reuse the whole conversation.
 - **`LLMProvider`** keeps the reasoning engine swappable.
 - **Pipeline registry** (data-driven YAML) is the seam where module-composed
-  pipelines and schema-validated definitions will land.
+  pipelines and schema-validated definitions will land. It loads the bundled
+  curated definitions **and** user-curated ones from `~/.bioagent/pipelines`
+  (`userDefinitionsDir`), where `synthDefinition.ts` writes definitions
+  auto-generated from a catalog pipeline's schema after a run — so the guided set
+  grows itself (bundled hand-curated wins on a name clash).
 - **`resources.ts`** is the foundation for per-process modeling and the
   infrastructure negotiation (HPC/cloud) of Phase 3.
 - **`runner.ts`** already isolates process execution, the natural place for an
