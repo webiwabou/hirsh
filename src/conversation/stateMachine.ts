@@ -5,7 +5,7 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
@@ -123,6 +123,7 @@ import {
   buildNfCoreTestRunCommand,
   fetchNfCoreCatalog,
   rankNfCorePipelines,
+  type NfCorePipeline,
 } from "../pipelines/nfcoreCatalog.js";
 import {
   fetchSynthesizedSpec,
@@ -131,6 +132,12 @@ import {
   type InputColumn,
   type SynthParam,
 } from "../pipelines/nfcoreSchema.js";
+import {
+  buildSynthesizedDefinition,
+  definitionFileName,
+  renderDefinitionYaml,
+} from "../pipelines/synthDefinition.js";
+import { invalidateRegistryCache, loadRegistry, userDefinitionsDir } from "../pipelines/registry.js";
 import type { AgentIO, ChoiceOption } from "./io.js";
 import type { Session, QueryContext } from "./session.js";
 
@@ -491,12 +498,69 @@ export class Agent {
     );
 
     if (choice === "compose") return false; // caller offers composition
-    if (choice === "data" && (await this.runEstablishedOnData(session, top.fullName, top.latestRelease!, top.description))) {
+    if (choice === "data" && (await this.runEstablishedOnData(session, top))) {
       return true;
     }
     // Explicit "test", or the on-data path couldn't fetch the schema — smoke run.
-    await this.runEstablishedTestProfile(session, top.fullName, top.latestRelease!, top.description);
+    await this.runEstablishedTestProfile(session, top);
     return true;
+  }
+
+  /**
+   * Offers to auto-curate a catalog pipeline into a persistent definition, so it
+   * becomes a first-class, guided pipeline next session. Best-effort: reads the
+   * schema, writes an honest auto-generated YAML to ~/.bioagent/pipelines, and
+   * confirms it loads (removing it if it doesn't). Never blocks the run.
+   */
+  private async offerCuration(pipeline: NfCorePipeline): Promise<void> {
+    if (this.registry.some((p) => p.name === pipeline.fullName)) return; // already curated
+    if (!pipeline.latestRelease) return;
+    const yes = await this.io.confirm(
+      `Curate ${pipeline.fullName} into Hirsh, so it's a guided, first-class pipeline next time?`,
+      true,
+    );
+    if (!yes) return;
+
+    const spec = await this.io.withSpinner("Reading its schema to curate it", () =>
+      fetchSynthesizedSpec(pipeline.fullName, pipeline.latestRelease!),
+    );
+    if (!spec) {
+      this.io.warn("Couldn't read the pipeline's schema; not curating.");
+      return;
+    }
+    const def = buildSynthesizedDefinition(
+      {
+        fullName: pipeline.fullName,
+        description: pipeline.description,
+        topics: pipeline.topics,
+        revision: pipeline.latestRelease,
+        url: pipeline.url,
+      },
+      spec,
+    );
+    const yaml = renderDefinitionYaml(def, new Date().toISOString().slice(0, 10));
+    const dir = userDefinitionsDir();
+    const file = join(dir, definitionFileName(pipeline.fullName));
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(file, yaml, "utf8");
+      invalidateRegistryCache();
+      const reloaded = loadRegistry();
+      if (!reloaded.some((p) => p.name === pipeline.fullName)) {
+        rmSync(file, { force: true });
+        invalidateRegistryCache();
+        this.io.warn("The generated definition didn't validate; not curating.");
+        return;
+      }
+    } catch (err) {
+      this.io.warn("Couldn't write the definition: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+    this.io.say(`Curated ${pipeline.fullName} → ${file}`);
+    this.io.info(
+      "Next session it'll be a guided pipeline. It's honest boilerplate — edit that file to refine its " +
+        "result outputs, resources and citation DOI; delete it to revert to the schema-driven flow.",
+    );
   }
 
   /**
@@ -508,12 +572,10 @@ export class Agent {
    * taken over (even if the user skips the input); false only when the schema is
    * unreachable, so the caller can fall back to the test profile.
    */
-  private async runEstablishedOnData(
-    session: Session,
-    pipeline: string,
-    revision: string,
-    description: string,
-  ): Promise<boolean> {
+  private async runEstablishedOnData(session: Session, top: NfCorePipeline): Promise<boolean> {
+    const pipeline = top.fullName;
+    const revision = top.latestRelease!;
+    const description = top.description;
     const spec = await this.io.withSpinner("Fetching the pipeline's input spec", () =>
       fetchSynthesizedSpec(pipeline, revision),
     );
@@ -605,10 +667,8 @@ export class Agent {
     }
     this.io.say(`${pipeline} completed successfully.`);
     await this.interpretDirectoryRun(session, pipeline, `${description} (on your data)`, outdir);
-    this.io.info(
-      `Results: ${outdir}. If ${pipeline} is a keeper, I can help you curate it into Hirsh as a ` +
-        "first-class, guided pipeline.",
-    );
+    this.io.info(`Results: ${outdir}.`);
+    await this.offerCuration(top);
     return true;
   }
 
@@ -715,12 +775,10 @@ export class Agent {
    * the local environment) work and shows its outputs. Reuses the normal
    * backend selection, environment gate and results interpretation.
    */
-  private async runEstablishedTestProfile(
-    session: Session,
-    pipeline: string,
-    revision: string,
-    description: string,
-  ): Promise<void> {
+  private async runEstablishedTestProfile(session: Session, top: NfCorePipeline): Promise<void> {
+    const pipeline = top.fullName;
+    const revision = top.latestRelease!;
+    const description = top.description;
     await this.phaseEnvironment(session);
     const engine = session.engine ?? this.config.execution.containerEngine;
 
@@ -767,10 +825,8 @@ export class Agent {
     }
     this.io.say(`${pipeline} test profile completed successfully.`);
     await this.interpretDirectoryRun(session, pipeline, `${description} (test profile)`, outdir);
-    this.io.info(
-      `To run ${pipeline} on your own data, its docs are at https://nf-co.re/${short} — or I can help you ` +
-        "curate it into Hirsh so it's a guided, first-class pipeline. Results: " + outdir,
-    );
+    this.io.info(`Results: ${outdir}. To run it on your own data, its docs are at https://nf-co.re/${short}.`);
+    await this.offerCuration(top);
   }
 
   /**
