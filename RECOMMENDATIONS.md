@@ -576,9 +576,15 @@ The full realization: a scientific collaborator, not a command builder.
     runs — by capturing the summary the interpreter already produces
     (`results/report.ts`: `chartToSvg`/`renderResultsReportHtml` pure + unit-tested;
     `writeResultsReport` best-effort, never blocks a run).
-  - ⬜ Remaining: richer figures (a volcano plot from the DE table, MultiQC
-    per-sample metric charts); per-tool citations inline (today they point to
-    CITATIONS.md); and an optional PDF export.
+    - ✅ **Volcano plots.** Every differential-expression contrast (a `de_table_dir`
+      output) gets a **volcano plot** in the report — the canonical DE figure,
+      log2FC vs -log10 padj, significant up/down genes coloured, thresholds drawn —
+      as a dependency-free inline SVG. The parser keeps all significant points and
+      down-samples the rest so the figure stays small (`parsers.ts::extractVolcano`
+      + `report.ts::volcanoToSvg`, pure/unit-tested; verified on a 2,000-gene table).
+  - ⬜ Remaining: MultiQC per-sample metric charts (values are formatted strings
+    today); per-tool citations inline (today they point to CITATIONS.md); and an
+    optional PDF export.
 - 🔵 **End-to-end autonomy with guardrails.** With `autonomy.enabled` (or `--auto`),
   Hirsh runs a request to an interpreted answer without pausing for reversible
   confirmations — it auto-answers those with their intended value and announces each

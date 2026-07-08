@@ -306,8 +306,10 @@ HTML reports (open them in your browser):
   context of your objective — revisiting any design caveats flagged before the run
   (e.g. a batch effect) and ending with a concrete next step. It writes a
   **shareable `REPORT.html`** into the run directory — the interpretation, the key
-  numbers, **inline SVG figures** and links to MultiQC/methods/provenance, all
-  self-contained (no external dependencies) so you can open or share it directly.
+  numbers, **inline SVG figures** (per-sample library sizes, and a **volcano plot**
+  for each differential-expression contrast) and links to MultiQC/methods/
+  provenance, all self-contained (no external dependencies) so you can open or
+  share it directly.
   It can also write a paste-ready **methods paragraph** (`METHODS.md`) with the
   exact pipeline/Nextflow/tool versions and citations (DOIs). When the pipeline has
   a runnable **follow-up** (e.g. rnaseq → differentialabundance), it offers to run
