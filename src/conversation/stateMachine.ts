@@ -124,6 +124,7 @@ import {
   type DesignObservation,
 } from "./designReview.js";
 import { reviewSamplesheetContent } from "./samplesheetReview.js";
+import { contrastsCsv, proposeContrastsFromSheet } from "./contrasts.js";
 import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
 import { chooseWith } from "./choice.js";
 import { selectPipeline } from "./pipelineSelection.js";
@@ -2643,6 +2644,104 @@ export class Agent {
    * through the usual confirmed-execution path. Reuses the chosen backend/executor.
    * Always confirmed; never a silent auto-chain.
    */
+  /**
+   * Collects the follow-up's scientist-provided inputs. Reviews a condition
+   * samplesheet (per-group replicates, missing control) as it's given, and — for
+   * the contrasts input — offers to build them from that samplesheet rather than
+   * asking for a hand-written CSV. Returns false to abort (a required input was
+   * left blank).
+   */
+  private async collectFollowUpInputs(
+    fu: NonNullable<PipelineDefinition["followUp"]>,
+    params: Record<string, string | number | boolean>,
+    runDir: string,
+  ): Promise<boolean> {
+    let conditionSheet: string | undefined;
+    for (const req of fu.requiredInputs ?? []) {
+      if (params[req.name] !== undefined) continue;
+
+      // Build the contrasts from the condition samplesheet if we have one.
+      if (req.name === "contrasts" && conditionSheet) {
+        const generated = await this.offerGeneratedContrasts(conditionSheet, runDir);
+        if (generated) {
+          params.contrasts = generated;
+          continue;
+        }
+      }
+
+      const ans = (
+        await this.io.ask(`${req.description}${req.optional ? " (optional — blank to skip)" : ""}\n  ${req.name}:`)
+      ).trim();
+      if (ans) {
+        const p = resolve(ans);
+        params[req.name] = p;
+        if ((req.name === "input" || /sample|condition/i.test(req.name)) && /\.csv$/i.test(p) && existsSync(p)) {
+          conditionSheet = p;
+          this.reviewConditionSheet(p);
+        }
+      } else if (!req.optional) {
+        this.io.warn(`${req.name} is required for ${fu.pipeline}; not running the follow-up.`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Reviews a follow-up condition samplesheet (per-group replicates, controls). */
+  private reviewConditionSheet(path: string): void {
+    let text: string;
+    try {
+      text = readFileSync(path, "utf8");
+    } catch {
+      return;
+    }
+    const design = reviewSamplesheetContent(text);
+    if (design.observations.length === 0) return;
+    if (worstSeverity({ observations: design.observations, summary: "" }) === "info") {
+      for (const o of design.observations) this.io.info(o.message);
+    } else {
+      this.io.heading("Condition samplesheet design check");
+      this.presentObservations(design.observations);
+    }
+  }
+
+  /**
+   * Offers to build the differential-expression contrasts from the condition
+   * samplesheet's grouping column. Returns the written contrasts.csv path, or null
+   * if it couldn't propose any or the scientist declined (they can supply their own).
+   */
+  private async offerGeneratedContrasts(conditionSheet: string, runDir: string): Promise<string | null> {
+    let text: string;
+    try {
+      text = readFileSync(conditionSheet, "utf8");
+    } catch {
+      return null;
+    }
+    const proposed = proposeContrastsFromSheet(text);
+    if (!proposed) return null;
+
+    this.io.say(`I can build the contrasts from your "${proposed.variable}" column:`);
+    for (const c of proposed.contrasts) this.io.info(`  • ${c.target} vs ${c.reference}`);
+    if (proposed.assumedReference) {
+      this.io.warn(
+        `No control group was recognizable, so I used "${proposed.contrasts[0].reference}" as the reference — ` +
+          "provide your own contrasts if that's not the intended comparison.",
+      );
+    }
+    const ok = await this.io.confirm("Use these contrasts?", true, { auto: true });
+    if (!ok) return null;
+
+    const path = join(runDir, "contrasts.csv");
+    try {
+      writeFileSync(path, contrastsCsv(proposed.contrasts), "utf8");
+    } catch (err) {
+      this.io.warn("Couldn't write contrasts.csv: " + (err instanceof Error ? err.message : String(err)));
+      return null;
+    }
+    this.io.info(`Wrote ${proposed.contrasts.length} contrast(s) to ${path}`);
+    return path;
+  }
+
   private async phaseFollowUp(session: Session, pipeline: PipelineDefinition): Promise<void> {
     const fu = pipeline.followUp;
     if (!isRunnableFollowUp(fu)) return; // suggestion-only follow-up: nothing to run
@@ -2694,18 +2793,9 @@ export class Agent {
     }
 
     // Extra inputs only the scientist can provide (condition table, contrasts).
-    for (const req of fu.requiredInputs ?? []) {
-      if (params[req.name] !== undefined) continue;
-      const ans = (
-        await this.io.ask(`${req.description}${req.optional ? " (optional — blank to skip)" : ""}\n  ${req.name}:`)
-      ).trim();
-      if (ans) {
-        params[req.name] = resolve(ans);
-      } else if (!req.optional) {
-        this.io.warn(`${req.name} is required for ${fu.pipeline}; not running the follow-up.`);
-        return;
-      }
-    }
+    // Reviews a provided condition samplesheet and offers to build the contrasts
+    // from it, instead of demanding a hand-written contrasts CSV.
+    if (!(await this.collectFollowUpInputs(fu, params, runDir))) return;
 
     // Light resource pre-flight (differentialabundance is modest — a whole-run
     // memory check, not the heavy per-process model). Skipped on a cluster/cloud
