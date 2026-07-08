@@ -10,7 +10,8 @@
  * fields (see types.ts). No need to touch this file or the core logic: the
  * registry picks it up automatically at startup.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -25,6 +26,17 @@ export class RegistryError extends Error {
 
 function definitionsDir(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "definitions");
+}
+
+/**
+ * User-local definitions directory, for pipelines Hirsh auto-curates from the
+ * nf-core catalog (see `synthDefinition.ts`). Kept separate from the bundled
+ * ones so learned pipelines persist across sessions without touching the
+ * installed package, and so a bundled (hand-curated) definition always wins over
+ * a user one of the same name.
+ */
+export function userDefinitionsDir(): string {
+  return resolve(homedir(), ".bioagent", "pipelines");
 }
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -45,39 +57,68 @@ function validate(def: unknown, file: string): PipelineDefinition {
   return def as PipelineDefinition;
 }
 
+function readYamlFiles(dir: string): string[] {
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 let cache: PipelineDefinition[] | null = null;
 
-/** Loads (and caches) all pipeline definitions from the directory. */
+/**
+ * Loads (and caches) all pipeline definitions: the bundled curated ones, plus
+ * any user-curated ones in `~/.bioagent/pipelines`. A bundled definition wins
+ * over a user one of the same name (hand-curated beats auto-generated), and
+ * later user files never shadow an already-loaded name.
+ */
 export function loadRegistry(): PipelineDefinition[] {
   if (cache) return cache;
-  const dir = definitionsDir();
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
-  } catch (err) {
-    throw new RegistryError(
-      `Could not read the definitions directory ${dir}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+  const bundledDir = definitionsDir();
+  const bundled = readYamlFiles(bundledDir);
+  if (bundled.length === 0) {
+    throw new RegistryError(`No pipeline definitions found in ${bundledDir}.`);
   }
-  assert(files.length > 0, `No pipeline definitions found in ${dir}.`);
 
   const defs: PipelineDefinition[] = [];
-  for (const file of files.sort()) {
+  const seen = new Set<string>();
+  const load = (dir: string, file: string, tolerant: boolean): void => {
     const full = join(dir, file);
     let parsed: unknown;
     try {
       parsed = parseYaml(readFileSync(full, "utf8"));
     } catch (err) {
-      throw new RegistryError(
-        `${file}: invalid YAML: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      if (tolerant) return; // a broken user file must not sink startup
+      throw new RegistryError(`${file}: invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
     }
-    defs.push(validate(parsed, file));
+    let def: PipelineDefinition;
+    try {
+      def = validate(parsed, file);
+    } catch (err) {
+      if (tolerant) return;
+      throw err;
+    }
+    if (seen.has(def.name)) return; // bundled/earlier wins
+    seen.add(def.name);
+    defs.push(def);
+  };
+
+  for (const file of bundled) load(bundledDir, file, false);
+  const userDir = userDefinitionsDir();
+  if (existsSync(userDir)) {
+    for (const file of readYamlFiles(userDir)) load(userDir, file, true);
   }
+
   cache = defs;
   return defs;
+}
+
+/** Clears the registry cache so a freshly curated definition is picked up. */
+export function invalidateRegistryCache(): void {
+  cache = null;
 }
 
 /** Finds a pipeline by its exact name (e.g. "nf-core/rnaseq"). */
