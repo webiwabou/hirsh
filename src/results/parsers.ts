@@ -66,10 +66,52 @@ export function summarizeTable(text: string): TableSummary {
   };
 }
 
+import type { ChartData, ChartItem } from "./charts.js";
+
 export interface GeneralStats {
   sampleCount: number;
   metrics: string[];
   perSample: Array<{ sample: string; values: Record<string, string> }>;
+}
+
+/** Shortens a MultiQC general-stats column to a readable metric label. */
+export function prettyMetric(name: string): string {
+  let n = name;
+  const marker = "generalstats-";
+  const idx = n.toLowerCase().indexOf(marker);
+  if (idx >= 0) n = n.slice(idx + marker.length);
+  n = n.replace(/[_-]+/g, " ").trim();
+  return n || name;
+}
+
+/**
+ * Builds one per-sample bar series per **numeric** MultiQC metric, for the HTML
+ * report. Skips non-numeric and constant metrics (no signal), and caps metrics
+ * and samples so the report stays light. Pure.
+ */
+export function metricSeries(
+  g: GeneralStats,
+  opts: { maxMetrics?: number; maxSamples?: number } = {},
+): ChartData[] {
+  const maxMetrics = opts.maxMetrics ?? 6;
+  const maxSamples = opts.maxSamples ?? 24;
+  const out: ChartData[] = [];
+  for (const metric of g.metrics) {
+    if (out.length >= maxMetrics) break;
+    const items: ChartItem[] = [];
+    for (const s of g.perSample.slice(0, maxSamples)) {
+      const raw = s.values[metric];
+      if (raw === undefined || raw.trim() === "") continue;
+      const v = Number(raw);
+      if (Number.isNaN(v)) continue;
+      items.push({ label: s.sample, value: v });
+    }
+    if (items.length < 2) continue; // need at least two samples to compare
+    const values = items.map((i) => i.value);
+    if (Math.max(...values) === Math.min(...values)) continue; // constant → no signal
+    out.push({ title: prettyMetric(metric), items });
+  }
+  return out;
 }
 
 /** Parses a MultiQC `multiqc_general_stats.txt` (TSV: Sample + metric columns). */

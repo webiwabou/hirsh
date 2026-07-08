@@ -1476,7 +1476,7 @@ export class Agent {
           found: o.found,
           detail: o.detail,
         })),
-        charts: report.charts ?? [],
+        charts: [...(report.charts ?? []), ...(report.metricCharts ?? [])],
         volcanoFigures: report.volcanoFigures,
         summaryText,
         htmlReports: report.htmlReports,

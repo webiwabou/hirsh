@@ -17,6 +17,7 @@ import {
   countDifferential,
   countVcfRecords,
   extractVolcano,
+  metricSeries,
   parseGeneralStats,
   summarizeTable,
   type VolcanoData,
@@ -54,6 +55,8 @@ export interface ResultsReport {
   htmlReports: string[];
   /** Small inline charts of the key numbers, for the terminal. */
   charts?: ChartData[];
+  /** Per-sample MultiQC metric charts, for the HTML report only (not the terminal). */
+  metricCharts?: ChartData[];
   /** Differential-expression volcano plots (per contrast), for the HTML report. */
   volcanoFigures?: VolcanoFigure[];
 }
@@ -118,23 +121,24 @@ function findGeneralStats(htmlPath: string): string | null {
   return candidates.find((c) => existsSync(c)) ?? null;
 }
 
-function describeMultiqc(htmlPath: string): string {
+function describeMultiqc(htmlPath: string): { detail: string; metricCharts: ChartData[] } {
   const stats = findGeneralStats(htmlPath);
-  if (!stats) return "HTML report available.";
+  if (!stats) return { detail: "HTML report available.", metricCharts: [] };
   const text = readTextMaybeGzip(stats);
-  if (text === null) return "HTML report available (general-stats table unreadable).";
+  if (text === null) return { detail: "HTML report available (general-stats table unreadable).", metricCharts: [] };
   const g = parseGeneralStats(text);
-  if (g.sampleCount === 0) return "HTML report available.";
+  if (g.sampleCount === 0) return { detail: "HTML report available.", metricCharts: [] };
   const shownMetrics = g.metrics.slice(0, 4);
   const rows = g.perSample
     .slice(0, 8)
     .map((s) => `${s.sample}: ${shownMetrics.map((m) => `${m}=${s.values[m]}`).join(", ")}`)
     .join("\n    ");
-  return [
+  const detail = [
     `HTML report available; general stats for ${g.sampleCount} sample(s).`,
     `Metrics: ${shownMetrics.join(", ")}${g.metrics.length > 4 ? ", …" : ""}.`,
     `Per sample:\n    ${rows}${g.perSample.length > 8 ? "\n    …" : ""}`,
   ].join("\n  ");
+  return { detail, metricCharts: metricSeries(g) };
 }
 
 /** Depth-bounded recursive file search matching a name predicate. */
@@ -280,6 +284,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
   const outputs: GatheredOutput[] = [];
   const htmlReports: string[] = [];
   const charts: ChartData[] = [];
+  const metricCharts: ChartData[] = [];
   const volcanoFigures: VolcanoFigure[] = [];
 
   for (const out of pipeline.results.outputs) {
@@ -288,7 +293,9 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
     let detail = "not found.";
     if (found) {
       if (out.kind === "multiqc_html") {
-        detail = describeMultiqc(absPath);
+        const r = describeMultiqc(absPath);
+        detail = r.detail;
+        metricCharts.push(...r.metricCharts);
         htmlReports.push(absPath);
       } else if (out.kind === "table") {
         const r = describeTable(absPath, out.path);
@@ -310,7 +317,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
     outputs.push({ output: out, absPath, found, detail });
   }
 
-  return { outdir: absOut, outputs, htmlReports, charts, volcanoFigures };
+  return { outdir: absOut, outputs, htmlReports, charts, metricCharts, volcanoFigures };
 }
 
 /** Generates the plain-language results summary using the LLM. */

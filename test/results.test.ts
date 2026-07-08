@@ -3,7 +3,9 @@ import {
   countDifferential,
   countVcfRecords,
   extractVolcano,
+  metricSeries,
   parseGeneralStats,
+  prettyMetric,
   summarizeTable,
 } from "../src/results/parsers.js";
 
@@ -42,6 +44,38 @@ describe("parseGeneralStats", () => {
     expect(g.sampleCount).toBe(2);
     expect(g.metrics).toEqual(["percent_gc", "percent_dups"]);
     expect(g.perSample[0]).toEqual({ sample: "s1", values: { percent_gc: "45", percent_dups: "12" } });
+  });
+});
+
+describe("prettyMetric", () => {
+  it("strips the MultiQC generalstats prefix and separators", () => {
+    expect(prettyMetric("FastQC_mqc-generalstats-fastqc-percent_duplicates")).toBe("fastqc percent duplicates");
+    expect(prettyMetric("percent_gc")).toBe("percent gc");
+  });
+});
+
+describe("metricSeries", () => {
+  it("builds one per-sample series per numeric, non-constant metric", () => {
+    const g = parseGeneralStats(
+      ["Sample\tpercent_gc\tpercent_dups\tflag", "s1\t45\t12\t1", "s2\t47\t15\t1", "s3\t50\t9\t1"].join("\n"),
+    );
+    const series = metricSeries(g);
+    // "flag" is constant (all 1) → skipped; two varying metrics remain.
+    expect(series.map((s) => s.title)).toEqual(["percent gc", "percent dups"]);
+    expect(series[0].items).toEqual([
+      { label: "s1", value: 45 },
+      { label: "s2", value: 47 },
+      { label: "s3", value: 50 },
+    ]);
+  });
+
+  it("skips non-numeric metrics and honors the metric cap", () => {
+    const g = parseGeneralStats(
+      ["Sample\ttool\tm1\tm2", "s1\tstar\t1\t9", "s2\tbwa\t2\t8"].join("\n"),
+    );
+    const series = metricSeries(g, { maxMetrics: 1 });
+    expect(series).toHaveLength(1);
+    expect(series[0].title).toBe("m1"); // "tool" (non-numeric) skipped
   });
 });
 
