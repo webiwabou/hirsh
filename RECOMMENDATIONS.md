@@ -666,8 +666,12 @@ The full realization: a scientific collaborator, not a command builder.
       %aligned…) — so QC differences across samples are visible at a glance. Skips
       non-numeric/constant metrics and caps the count; report-only so the terminal
       stays lean (`parsers.ts::metricSeries`/`prettyMetric`, pure/unit-tested).
-  - ⬜ Remaining: per-tool citations inline in the report (today they point to
-    CITATIONS.md); and an optional PDF export.
+    - ✅ **Tool versions in the report.** The report lists the exact tool→version
+      pairs nf-core recorded for the run (from `software_versions`) as chips, so the
+      scientist has the versions to cite right there — pointing at `METHODS.md` for
+      the full statement and DOIs (`report.ts::toolsSection`, unit-tested).
+  - ⬜ Remaining: inline per-tool DOIs in the report (today they point to
+    METHODS.md/CITATIONS.md); and an optional PDF export.
 - 🔵 **End-to-end autonomy with guardrails.** With `autonomy.enabled` (or `--auto`),
   Hirsh runs a request to an interpreted answer without pausing for reversible
   confirmations — it auto-answers those with their intended value and announces each
