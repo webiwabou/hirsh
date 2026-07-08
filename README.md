@@ -434,9 +434,13 @@ the real question — *which genes are differentially expressed?* — is answere
 [`nf-core/differentialabundance`](https://nf-co.re/differentialabundance) run on
 those counts. After interpreting the results, Hirsh **offers to run that follow-up
 directly**: it wires the upstream count matrix into the follow-up's `--matrix`,
-carries over the annotation (`gtf`) from your run, and asks only for what it can't
-infer — a **sample-condition table** and a **contrasts** file (which comparisons to
-test). It then runs the follow-up through the same confirmed path, reusing the
+carries over the annotation (`gtf`) from your run, and asks only for the
+**sample-condition table**. It **reviews that table** (per-group replicates, and
+whether a control/reference group is present) and then **builds the contrasts for
+you** — each group vs the detected control (untreated/vehicle/WT/normal…), or vs an
+assumed reference it flags when none is recognizable — so you don't hand-write a
+`contrasts` CSV (always shown for confirmation; you can still supply your own). It
+then runs the follow-up through the same confirmed path, reusing the
 backend/executor you already chose. It always asks first and never auto-chains; if
 an expected output or a required input is missing, it degrades gracefully and
 leaves everything prepared for you.

@@ -587,9 +587,20 @@ The full realization: a scientific collaborator, not a command builder.
     Advisory (the run confirmation is the decision point), and merged into
     `session.designReview` so Phase E revisits them
     (`conversation/samplesheetReview.ts::reviewSamplesheetContent`, pure/unit-tested).
-  - ⬜ Remaining: suggest specific analyses/controls (e.g. propose a missing
-    control or contrast); review the differential-abundance follow-up's condition
-    samplesheet too.
+  - ✅ **Suggests controls and builds the contrasts.** The review now recognizes a
+    control/reference level (untreated/vehicle/WT/normal/day0…) among the groups
+    and flags when none is present (a clear reference is needed for any
+    comparison). And in the differential-abundance follow-up, when the scientist
+    provides the condition samplesheet, Hirsh **reviews it too** (per-group
+    replicates, missing control) and **proposes the contrasts** from its grouping
+    column — each group vs the detected control, or vs an assumed reference
+    (flagged) when none is recognizable — writing a reviewed `contrasts.csv`
+    instead of demanding a hand-written one (always confirmed; they can supply
+    their own) (`conversation/contrasts.ts` + `samplesheetReview.ts::detectControlGroup`,
+    pure/unit-tested; `collectFollowUpInputs` wired).
+  - ⬜ Remaining: suggest an extra QC/analysis step from the data (e.g. flag a
+    likely batch covariate to include in the model), and propose contrasts for a
+    multi-factor design (interactions).
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool
