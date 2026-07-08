@@ -111,6 +111,17 @@ don't mix their remembered analyses or environment defaults. The banner shows th
 active workspace. (Set `memory.path` in config to share one memory store across
 projects instead.)
 
+To scaffold a new workspace, run **`hirsh init [path]`**: it creates a starter
+`config.yaml`, a `.gitignore` (keeping `runs/` and the private `.hirsh/` out of
+git), and the `.hirsh/` data directory. It's safe to re-run — it never overwrites
+an existing file and only tops up a missing `.gitignore` entry.
+
+```bash
+hirsh init my-study    # scaffold ./my-study
+cd my-study
+hirsh                  # start working in it
+```
+
 ## Configuration
 
 Copy the example and edit it:

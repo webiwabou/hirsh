@@ -507,10 +507,14 @@ The full realization: a scientific collaborator, not a command builder.
   (an explicit `config.memory.path` still overrides for a shared store)
   (`cli/workspace.ts::resolveWorkspace` pure + unit-tested;
   `memory/store.ts::defaultMemoryPath(baseDir)`).
-  - ⬜ Remaining: a `hirsh init` that scaffolds a workspace (a starter
-    `.hirsh/config.yaml`, a `.gitignore` for `runs/`); optionally per-project
-    curated pipelines (`<workspace>/.hirsh/pipelines`) in addition to the global
-    ones; and a `runs/` index/listing command.
+  - ✅ **`hirsh init [path]`** scaffolds a workspace — a starter `config.yaml`, a
+    `.gitignore` (keeping `runs/` and the private `.hirsh/` out of git), and the
+    `.hirsh/` data dir. Safe and idempotent: never overwrites an existing file,
+    only tops up missing `.gitignore` entries (`cli/init.ts`:
+    `starterConfigYaml`/`mergeGitignore`/`runInit`, unit-tested).
+  - ⬜ Remaining: optionally per-project curated pipelines
+    (`<workspace>/.hirsh/pipelines`) in addition to the global ones; and a `runs/`
+    index/listing command.
 - ✅ **Automatic public-data retrieval.** A scientist rarely has FASTQ files on
   hand — they have *accession numbers* from a paper. Hirsh now recognizes public
   accessions in the request (SRA/ENA/DDBJ runs, experiments, studies; GEO series/
