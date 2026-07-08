@@ -77,15 +77,29 @@ async function checkContainer(engine: ContainerEngine): Promise<ToolStatus> {
     };
   }
 
-  const res = await which("docker", ["--version"]);
-  if (res.ok) return { name: "docker", available: true, version: res.out };
-  return {
-    name: "docker",
-    available: false,
-    hint:
-      "Docker is not on PATH. Install it (https://docs.docker.com/get-docker/) and make sure " +
-      'the daemon is running, or choose another backend (e.g. "singularity" or "conda").',
-  };
+  const cli = await which("docker", ["--version"]);
+  // The Docker CLI can be present while the daemon is down — a run would then fail
+  // cryptically mid-way, so check the daemon is reachable before allowing it.
+  const daemonOk = cli.ok && (await which("docker", ["info", "--format", "{{.ServerVersion}}"])).ok;
+  return dockerStatus(cli, daemonOk);
+}
+
+const DOCKER_NOT_INSTALLED =
+  "Docker is not on PATH. Install it (https://docs.docker.com/get-docker/) and make sure " +
+  'the daemon is running, or choose another backend (e.g. "singularity" or "conda").';
+const DOCKER_DAEMON_DOWN =
+  "Docker is installed but its daemon isn't reachable — start Docker (e.g. `sudo systemctl start docker`, " +
+  'or launch Docker Desktop), then retry. You can also choose another backend (e.g. "conda").';
+
+/**
+ * Decides Docker's status from the CLI-present and daemon-reachable checks. A
+ * present CLI with an unreachable daemon is reported as NOT usable (with a daemon
+ * hint), since a real run would fail. Pure, so the decision is unit-tested.
+ */
+export function dockerStatus(cli: { ok: boolean; out: string }, daemonOk: boolean): ToolStatus {
+  if (!cli.ok) return { name: "docker", available: false, hint: DOCKER_NOT_INSTALLED };
+  if (!daemonOk) return { name: "docker", available: false, version: cli.out, hint: DOCKER_DAEMON_DOWN };
+  return { name: "docker", available: true, version: cli.out };
 }
 
 export async function checkEnvironment(engine: ContainerEngine): Promise<EnvReport> {
