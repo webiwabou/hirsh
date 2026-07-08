@@ -69,3 +69,25 @@ export function checkParamsAgainstSchema(
   }
   return problems;
 }
+
+/**
+ * Informational (non-failing) diff of **non-enum** default values: reports when a
+ * curated definition's declared `default` differs from the upstream schema's
+ * default. Enum defaults are validated by `checkParamsAgainstSchema`; this catches
+ * silent drift in plain values (e.g. a changed default aligner path). Pure.
+ */
+export function diffDefaults(params: DeclaredParam[], props: Map<string, SchemaProp>): string[] {
+  const notes: string[] = [];
+  for (const p of params) {
+    if (Array.isArray(p.choices)) continue; // enum defaults handled elsewhere
+    if (p.default === undefined || p.default === null) continue;
+    const spec = props.get(p.name);
+    if (!spec) continue; // a missing param is reported by checkParamsAgainstSchema
+    const upstream = spec.default;
+    if (upstream === undefined || upstream === null) continue; // nothing to compare
+    if (String(upstream) !== String(p.default)) {
+      notes.push(`${p.name}: default "${p.default}" differs from the upstream default "${upstream}"`);
+    }
+  }
+  return notes;
+}

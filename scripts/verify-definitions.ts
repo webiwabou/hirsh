@@ -10,6 +10,7 @@ import { parse as parseYaml } from "yaml";
 import {
   checkParamsAgainstSchema,
   collectSchemaProperties,
+  diffDefaults,
   type DeclaredParam,
 } from "../src/pipelines/schemaCheck.js";
 
@@ -52,6 +53,10 @@ for (const file of readdirSync(defsDir).filter((f) => /\.ya?ml$/.test(f))) {
   } else {
     console.log(`OK (${params.length} params present; enum defaults/choices valid)`);
   }
+
+  // Informational: non-enum default drift (does not fail the check).
+  const drift = diffDefaults(params, props);
+  for (const note of drift) console.log(`  · info: ${note}`);
 }
 
 process.exit(failed ? 1 : 0);

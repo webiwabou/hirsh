@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { checkParamsAgainstSchema, collectSchemaProperties } from "../src/pipelines/schemaCheck.js";
+import {
+  checkParamsAgainstSchema,
+  collectSchemaProperties,
+  diffDefaults,
+} from "../src/pipelines/schemaCheck.js";
 
 const schema = {
   definitions: {
@@ -51,5 +55,22 @@ describe("checkParamsAgainstSchema", () => {
     expect(checkParamsAgainstSchema([{ name: "not_real" }], props)).toEqual([
       "not_real: not a parameter of the upstream schema",
     ]);
+  });
+});
+
+describe("diffDefaults", () => {
+  const props = collectSchemaProperties(schema);
+
+  it("notes a non-enum default that drifted from upstream", () => {
+    const notes = diffDefaults([{ name: "cluster_coverage", default: 0.8 }], props);
+    expect(notes).toEqual(['cluster_coverage: default "0.8" differs from the upstream default "0.9"']);
+  });
+
+  it("stays silent when the default matches, is an enum, or upstream has none", () => {
+    expect(diffDefaults([{ name: "cluster_coverage", default: 0.9 }], props)).toEqual([]);
+    // clustering_tool has choices → handled by checkParamsAgainstSchema, skipped here.
+    expect(diffDefaults([{ name: "clustering_tool", default: "cluster", choices: ["linclust", "cluster"] }], props)).toEqual([]);
+    // input has no upstream default.
+    expect(diffDefaults([{ name: "input", default: "x" }], props)).toEqual([]);
   });
 });
