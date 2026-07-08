@@ -91,6 +91,26 @@ chmod +x ~/.local/bin/hirsh
 Then just run `hirsh` from any directory. When run outside the project, put your
 configuration in `~/.bioagent/config.yaml` (see below) so it is always found.
 
+### Project workspaces
+
+Hirsh works like an editor opened in a directory: it operates inside a
+**workspace** — your project folder — so each study keeps its own runs, config and
+history instead of everything piling up in one place. Point Hirsh at a folder in
+any of these ways (highest precedence first):
+
+```bash
+hirsh /path/to/my-study      # a bare path argument
+hirsh --workdir /path/to/my-study   # or -C /path/to/my-study
+HIRSH_WORKSPACE=/path/to/my-study hirsh
+cd /path/to/my-study && hirsh       # or just launch from inside it
+```
+
+Inside the workspace, Hirsh reads `./config.yaml`, writes runs to `./runs/…`, and
+keeps **per-project memory** in `./.hirsh/memory.json` — so different projects
+don't mix their remembered analyses or environment defaults. The banner shows the
+active workspace. (Set `memory.path` in config to share one memory store across
+projects instead.)
+
 ## Configuration
 
 Copy the example and edit it:

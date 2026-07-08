@@ -16,7 +16,8 @@ A short design document and extension guide for future phases.
 ```
 src/
 ├── cli/              terminal REPL (I/O, commands /status /reset /help /exit)
-│   ├── index.ts      startup: config → registry → provider → env → conversation loop
+│   ├── index.ts      startup: workspace chdir → config → registry → provider → env → conversation loop
+│   ├── workspace.ts  resolves the project workspace (hirsh [path] / --workdir / HIRSH_WORKSPACE / cwd) (Phase 6)
 │   ├── banner.ts     minimal one-line logo, rounded welcome frame and tips
 │   ├── terminalIO.ts AgentIO implementation over readline + chalk
 │   └── autonomousIO.ts  IO decorator for autonomous mode (auto-answers reversible confirms) (Phase 6)
@@ -88,9 +89,13 @@ test/                 Vitest suite for the pure logic (resources, samplesheet,
 
 ### Data flow
 
-`cli/index.ts` builds the dependencies (config, registry, provider, IO) and
-creates an `Agent` (`conversation/stateMachine.ts`). The `Agent` drives the
-phases using two decoupled collaborators:
+`cli/index.ts` first resolves the **workspace** (`cli/workspace.ts`) and `chdir`s
+into it, so the whole session is scoped to the scientist's project folder:
+`./config.yaml`, `./runs/…` and per-project memory (`<workspace>/.hirsh/memory.json`,
+via `defaultMemoryPath(cwd)`) are all workspace-local. It then builds the
+dependencies (config, registry, provider, IO) and creates an `Agent`
+(`conversation/stateMachine.ts`). The `Agent` drives the phases using two
+decoupled collaborators:
 
 - **`AgentIO`** — everything said to / asked of the user. The terminal is one
   implementation; it could be swapped (tests, another frontend) without touching
