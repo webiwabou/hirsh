@@ -39,6 +39,16 @@ export function userDefinitionsDir(): string {
   return resolve(homedir(), ".bioagent", "pipelines");
 }
 
+/**
+ * Project-local definitions directory (`<workspace>/.hirsh/pipelines`). Loaded in
+ * addition to the machine-global ones, and takes precedence over them, so a
+ * scientist can pin a definition to a single project. The CLI chdirs into the
+ * workspace, so this resolves relative to the current directory.
+ */
+export function projectDefinitionsDir(): string {
+  return resolve(process.cwd(), ".hirsh", "pipelines");
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new RegistryError(message);
 }
@@ -106,10 +116,12 @@ export function loadRegistry(): PipelineDefinition[] {
     defs.push(def);
   };
 
+  // Precedence on a name clash: bundled (hand-curated) > project-local > global.
   for (const file of bundled) load(bundledDir, file, false);
-  const userDir = userDefinitionsDir();
-  if (existsSync(userDir)) {
-    for (const file of readYamlFiles(userDir)) load(userDir, file, true);
+  for (const dir of [projectDefinitionsDir(), userDefinitionsDir()]) {
+    if (existsSync(dir)) {
+      for (const file of readYamlFiles(dir)) load(dir, file, true);
+    }
   }
 
   cache = defs;
