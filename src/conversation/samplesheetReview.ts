@@ -64,6 +64,15 @@ export interface GroupCount {
   replicates: number;
 }
 
+export interface MergedSample {
+  /** The sample id that appears on more than one samplesheet row. */
+  sample: string;
+  /** The group the sample belongs to (empty when no grouping column). */
+  group: string;
+  /** How many rows (e.g. lanes / runs) share this sample id and get merged. */
+  rows: number;
+}
+
 export interface SamplesheetDesign {
   /** The detected grouping column, or null if none is present. */
   groupColumn: string | null;
@@ -73,7 +82,67 @@ export interface SamplesheetDesign {
   batchColumn: string | null;
   /** How the batch relates to the condition (for a blocking factor / covariate). */
   batchDesign: BatchDesign;
+  /**
+   * Sample ids that occur on more than one row — technical replicates (e.g.
+   * multiple lanes/runs of the same library) that nf-core merges into one
+   * biological replicate. Empty when every sample id is unique.
+   */
+  mergedSamples: MergedSample[];
   observations: DesignObservation[];
+}
+
+/**
+ * Finds sample ids that appear on more than one row: technical replicates
+ * (typically sequencing lanes or top-up runs of the same library) that nf-core
+ * pipelines concatenate into one biological replicate. Pure. `groupOf` maps a
+ * sample id to its group for reporting (empty string when ungrouped). Only rows
+ * with a non-empty sample id are considered — a blank id can't be a merge key.
+ */
+export function detectTechnicalReplicates(
+  sampleIds: string[],
+  groupOf: Map<string, string> = new Map(),
+): MergedSample[] {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const raw of sampleIds) {
+    const sample = raw.trim();
+    if (sample === "") continue;
+    if (!counts.has(sample)) order.push(sample);
+    counts.set(sample, (counts.get(sample) ?? 0) + 1);
+  }
+  return order
+    .filter((sample) => (counts.get(sample) ?? 0) > 1)
+    .map((sample) => ({ sample, group: groupOf.get(sample) ?? "", rows: counts.get(sample)! }))
+    .sort((a, b) => b.rows - a.rows || a.sample.localeCompare(b.sample));
+}
+
+/**
+ * A human-readable note about merged technical replicates, or null when there
+ * are none. Kept separate so both the grouped and ungrouped paths share the
+ * exact wording. Pure.
+ */
+function mergeObservation(merged: MergedSample[], groupColumn: string | null): DesignObservation | null {
+  if (merged.length === 0) return null;
+  const totalRows = merged.reduce((n, m) => n + m.rows, 0);
+  const detail = merged
+    .slice(0, 6)
+    .map((m) => {
+      const where = groupColumn && m.group !== "" ? ` in ${groupColumn} "${m.group}"` : "";
+      return `${m.sample} (${m.rows} rows${where})`;
+    })
+    .join(", ");
+  const more = merged.length > 6 ? `, and ${merged.length - 6} more` : "";
+  const noun = merged.length === 1 ? "sample id appears" : "sample ids appear";
+  return {
+    severity: "info",
+    topic: "technical replicates",
+    message:
+      `${merged.length} ${noun} on multiple rows (${totalRows} rows total): ${detail}${more}. ` +
+      `nf-core merges rows that share a sample id — these are treated as technical replicates ` +
+      `(e.g. lanes or top-up runs of one library), not separate biological replicates.`,
+    suggestion:
+      "Confirm this is intended: if these are genuinely distinct biological samples, give each a unique sample id so they aren't concatenated.",
+  };
 }
 
 function parseCsv(text: string): { header: string[]; rows: string[][] } {
@@ -99,11 +168,32 @@ export function reviewSamplesheetContent(
 ): SamplesheetDesign {
   const recommended = opts.recommendedReplicates ?? 3;
   const { header, rows } = parseCsv(text);
-  const groupIdx = detectGroupColumn(header);
-  if (groupIdx === -1 || rows.length === 0) {
-    return { groupColumn: null, groupCounts: [], batchColumn: null, batchDesign: "none", observations: [] };
-  }
   const sampleIdx = header.findIndex((h) => /^(sample|sample_?id|id)$/i.test(h));
+  const groupIdx = detectGroupColumn(header);
+
+  // Technical-replicate (lane/run) merging is worth surfacing even on a plain
+  // sheet with no grouping column, so detect it up front from the sample column.
+  const groupOf = new Map<string, string>();
+  if (sampleIdx >= 0 && groupIdx >= 0) {
+    for (const row of rows) {
+      const sample = (row[sampleIdx] ?? "").trim();
+      if (sample !== "" && !groupOf.has(sample)) groupOf.set(sample, (row[groupIdx] ?? "").trim());
+    }
+  }
+  const mergedSamples =
+    sampleIdx >= 0 ? detectTechnicalReplicates(rows.map((r) => r[sampleIdx] ?? ""), groupOf) : [];
+  const mergeNote = mergeObservation(mergedSamples, groupIdx >= 0 ? header[groupIdx] : null);
+
+  if (groupIdx === -1 || rows.length === 0) {
+    return {
+      groupColumn: null,
+      groupCounts: [],
+      batchColumn: null,
+      batchDesign: "none",
+      mergedSamples,
+      observations: mergeNote ? [mergeNote] : [],
+    };
+  }
 
   // Biological replicates = distinct sample ids per group (rows sharing a sample
   // id are technical replicates that get merged), falling back to row counts.
@@ -118,7 +208,14 @@ export function reviewSamplesheetContent(
     perGroup.get(group)!.add(key);
   }
   if (perGroup.size === 0) {
-    return { groupColumn: header[groupIdx], groupCounts: [], batchColumn: null, batchDesign: "none", observations: [] };
+    return {
+      groupColumn: header[groupIdx],
+      groupCounts: [],
+      batchColumn: null,
+      batchDesign: "none",
+      mergedSamples,
+      observations: mergeNote ? [mergeNote] : [],
+    };
   }
 
   const groupCounts: GroupCount[] = [...perGroup.entries()]
@@ -135,6 +232,7 @@ export function reviewSamplesheetContent(
     topic: "replication",
     message: `Per-group replicate counts (by "${col}"): ${summary}.`,
   });
+  if (mergeNote) observations.push(mergeNote);
 
   if (groupCounts.length < 2) {
     observations.push({
@@ -142,7 +240,7 @@ export function reviewSamplesheetContent(
       topic: "design",
       message: `Only one group ("${groupCounts[0].group}") is present in the samplesheet; any comparison groups must be defined elsewhere (e.g. a contrasts file).`,
     });
-    return { groupColumn: col, groupCounts, batchColumn: null, batchDesign: "none", observations };
+    return { groupColumn: col, groupCounts, batchColumn: null, batchDesign: "none", mergedSamples, observations };
   }
 
   const singles = groupCounts.filter((g) => g.replicates <= 1).map((g) => g.group);
@@ -217,5 +315,5 @@ export function reviewSamplesheetContent(
     }
   }
 
-  return { groupColumn: col, groupCounts, batchColumn, batchDesign, observations };
+  return { groupColumn: col, groupCounts, batchColumn, batchDesign, mergedSamples, observations };
 }

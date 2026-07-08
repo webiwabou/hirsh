@@ -219,7 +219,14 @@ Make every supported pipeline safe to run for real and make its output land as
   normal; rnaseq supports per-sample strandedness (shared default + overrides);
   users can point at an existing samplesheet, which is validated against the
   pipeline's column spec (`validateSamplesheetContent`, unit-tested).
-  - ⬜ Remaining: deeper design checks (e.g. balanced conditions, lane merging).
+  - ✅ **Deeper design checks.** The samplesheet review flags **unbalanced groups**
+    (largest vs smallest) and now **notes technical-replicate (lane) merging**: it
+    detects sample ids that appear on more than one row — sequencing lanes or top-up
+    runs of the same library that nf-core concatenates into one biological replicate
+    — names them (with their group and row count) and asks the scientist to confirm
+    the merge is intended (a distinct biological sample needs a unique id). Surfaced
+    even on a plain sheet with no grouping column, and carried into interpretation
+    (`samplesheetReview.ts::detectTechnicalReplicates`, pure/unit-tested).
   - ✅ **Content-based ingestion (extension-agnostic).** When a FASTQ folder has no
     `.fastq/.fq` files, Phase C sniffs file *content* — gzip magic bytes
     (decompressing just the head), a FASTQ record (`@` with a `+` line, told apart
