@@ -19,7 +19,7 @@ import type { ModuleRegistry } from "../modules/registry.js";
 import type { NfCoreModule } from "../modules/types.js";
 import type { CompositionPlan, ResolvedComposition } from "./types.js";
 import { renderLocalMeta, renderLocalModuleMain, type LocalToolSpec } from "./localModule.js";
-import { buildWorkflow } from "./wiring.js";
+import { buildWorkflow, inputColumn, inputExtension, type InputSpec } from "./wiring.js";
 
 export interface GenerationResult {
   dir: string;
@@ -27,19 +27,16 @@ export interface GenerationResult {
   warnings: string[];
   referenceParams: string[];
   notes: string[];
+  /** What the generated pipeline's input channel carries (reads vs a single file). */
+  input: InputSpec;
 }
 
 const NF_MIN = "!>=23.04.0";
 
-function renderMainNf(plan: CompositionPlan): string {
+function renderMainNf(plan: CompositionPlan, input: InputSpec): string {
   const wf = `HIRSH_${plan.pipelineName.toUpperCase()}`;
-  return `#!/usr/bin/env nextflow
-nextflow.enable.dsl = 2
-
-include { ${wf} } from './workflows/${plan.pipelineName}'
-
-workflow {
-    // Samplesheet reader (columns: sample,fastq_1[,fastq_2]) → [ meta, [ reads ] ].
+  const reader = input.reads
+    ? `    // Samplesheet reader (columns: sample,fastq_1[,fastq_2]) → [ meta, [ reads ] ].
     ch_input = Channel
         .fromPath(params.input)
         .splitCsv(header: true)
@@ -47,7 +44,21 @@ workflow {
             def meta = [ id: row.sample, single_end: !row.fastq_2 ]
             def reads = row.fastq_2 ? [ file(row.fastq_1), file(row.fastq_2) ] : [ file(row.fastq_1) ]
             tuple(meta, reads)
-        }
+        }`
+    : `    // Samplesheet reader (columns: sample,${inputColumn(input.kind)}) → [ meta, ${input.kind} ].
+    ch_input = Channel
+        .fromPath(params.input)
+        .splitCsv(header: true)
+        .map { row ->
+            tuple([ id: row.sample ], file(row.${inputColumn(input.kind)}))
+        }`;
+  return `#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { ${wf} } from './workflows/${plan.pipelineName}'
+
+workflow {
+${reader}
 
     ${wf}(ch_input)
 }
@@ -179,20 +190,25 @@ ${modules.map((m) => `- \`${m.name}\``).join("\n")}
 `;
 }
 
-function renderInputSchema(): string {
+function renderInputSchema(input: InputSpec): string {
+  const properties: Record<string, unknown> = {
+    sample: { type: "string", meta: ["id"], errorMessage: "Sample name is required." },
+  };
+  let required: string[];
+  if (input.reads) {
+    properties.fastq_1 = { type: "string", format: "file-path", errorMessage: "fastq_1 path is required." };
+    properties.fastq_2 = { type: "string", format: "file-path" };
+    required = ["sample", "fastq_1"];
+  } else {
+    const col = inputColumn(input.kind);
+    properties[col] = { type: "string", format: "file-path", errorMessage: `${col} path is required.` };
+    required = ["sample", col];
+  }
   const doc = {
     $schema: "http://json-schema.org/draft-07/schema",
     title: "Samplesheet validation schema",
     type: "array",
-    items: {
-      type: "object",
-      properties: {
-        sample: { type: "string", meta: ["id"], errorMessage: "Sample name is required." },
-        fastq_1: { type: "string", format: "file-path", errorMessage: "fastq_1 path is required." },
-        fastq_2: { type: "string", format: "file-path" },
-      },
-      required: ["sample", "fastq_1"],
-    },
+    items: { type: "object", properties, required },
   };
   return JSON.stringify(doc, null, 4) + "\n";
 }
@@ -288,26 +304,35 @@ export async function generatePipeline(
 
   const wiring = buildWorkflow(plan, modules);
 
-  write("main.nf", renderMainNf(plan));
+  write("main.nf", renderMainNf(plan, wiring.input));
   write(`workflows/${plan.pipelineName}.nf`, wiring.workflow);
   write("nextflow.config", renderNextflowConfig(plan, wiring.referenceParams));
   write("conf/test.config", renderTestConfig(wiring.referenceParams));
   write("nextflow_schema.json", renderPipelineSchema(plan, wiring.referenceParams));
   write("modules.json", renderModulesJson(plan, nfcoreModules, sha));
-  write("assets/schema_input.json", renderInputSchema());
+  write("assets/schema_input.json", renderInputSchema(wiring.input));
   write("CITATIONS.md", renderCitations(modules, localTools));
   write("README.md", renderReadme(plan, modules, wiring.referenceParams));
   write(".nf-core.yml", renderNfCoreYml());
 
   // --- Dummy test data so `-profile test -stub-run` works with no edits ---
-  const r1 = join(dir, "assets/reads/SAMPLE1_R1.fastq.gz");
-  const r2 = join(dir, "assets/reads/SAMPLE1_R2.fastq.gz");
-  write("assets/reads/SAMPLE1_R1.fastq.gz", "");
-  write("assets/reads/SAMPLE1_R2.fastq.gz", "");
-  write("assets/samplesheet_test.csv", `sample,fastq_1,fastq_2\nSAMPLE1,${r1},${r2}\n`);
+  // Match the placeholder samplesheet to what the input channel actually carries.
+  if (wiring.input.reads) {
+    const r1 = join(dir, "assets/reads/SAMPLE1_R1.fastq.gz");
+    const r2 = join(dir, "assets/reads/SAMPLE1_R2.fastq.gz");
+    write("assets/reads/SAMPLE1_R1.fastq.gz", "");
+    write("assets/reads/SAMPLE1_R2.fastq.gz", "");
+    write("assets/samplesheet_test.csv", `sample,fastq_1,fastq_2\nSAMPLE1,${r1},${r2}\n`);
+  } else {
+    const col = inputColumn(wiring.input.kind);
+    const ext = inputExtension(wiring.input.kind);
+    const rel = `assets/input/SAMPLE1.${ext}`;
+    write(rel, "");
+    write("assets/samplesheet_test.csv", `sample,${col}\nSAMPLE1,${join(dir, rel)}\n`);
+  }
   for (const p of wiring.referenceParams) {
     write(`assets/refs/${p}.txt`, "");
   }
 
-  return { dir, files, warnings, referenceParams: wiring.referenceParams, notes: wiring.notes };
+  return { dir, files, warnings, referenceParams: wiring.referenceParams, notes: wiring.notes, input: wiring.input };
 }

@@ -106,9 +106,11 @@ import { planLintFixes, shouldContinueFixing, stripNfCoreTodos } from "../compos
 import {
   buildComposedRunCommand,
   composedRowsFromFiles,
+  composedSheetHeader,
   type ComposedRunParam,
   type ComposedSheetRow,
 } from "../composition/run.js";
+import type { InputSpec } from "../composition/wiring.js";
 import { collectLocalTool, toNfCoreModule, type LocalToolSpec } from "../composition/localModule.js";
 import { proposeLocalTools } from "../composition/localToolProposal.js";
 import { writeContribution } from "../composition/contribution.js";
@@ -1264,7 +1266,7 @@ export class Agent {
     }
 
     await this.phaseExecutor(session, result.dir);
-    const input = await this.resolveComposedInput(result.dir);
+    const input = await this.resolveComposedInput(result.dir, result.input);
 
     // Without an input, a composed pipeline that reads a samplesheet will fail —
     // don't launch a doomed run; offer the test profile instead.
@@ -1374,7 +1376,10 @@ export class Agent {
    * builds the samplesheet (columns sample,fastq_1,fastq_2) for them, so they
    * don't hand-write a CSV. Returns "" to skip. `@` paths supported.
    */
-  private async resolveComposedInput(runDir: string): Promise<string> {
+  private async resolveComposedInput(
+    runDir: string,
+    input: InputSpec = { kind: "reads", reads: true },
+  ): Promise<string> {
     const raw = (
       await this.io.ask(
         "Your input — a samplesheet CSV, or a sequence file/folder I'll build one from " +
@@ -1390,21 +1395,21 @@ export class Agent {
     }
     if (/\.csv$/i.test(p)) return p; // already a samplesheet
 
-    const rows = await this.composedRowsFromPath(p);
+    const rows = await this.composedRowsFromPath(p, input);
     if (rows.length === 0) {
       this.io.warn("I couldn't find sequence files there; skipping the input.");
       return "";
     }
-    const header = ["sample", "fastq_1", "fastq_2"];
+    const header = composedSheetHeader(input);
     const path = join(runDir, "samplesheet.csv");
     try {
-      writeCsv(path, header, rows as unknown as Array<Record<string, string>>);
+      writeCsv(path, header, rows);
     } catch (err) {
       this.io.warn("Couldn't write the samplesheet: " + (err instanceof Error ? err.message : String(err)));
       return "";
     }
     this.io.say("Built a samplesheet from your files:");
-    this.io.say(previewCsv(header, rows as unknown as Array<Record<string, string>>));
+    this.io.say(previewCsv(header, rows));
     this.io.info(
       "Note: a composed pipeline reads inputs generically — your file(s) are wired into its input " +
         "channel; review the results with that in mind.",
@@ -1414,26 +1419,32 @@ export class Agent {
   }
 
   /** Builds samplesheet rows from a sequence file or a folder of them. */
-  private async composedRowsFromPath(p: string): Promise<ComposedSheetRow[]> {
+  private async composedRowsFromPath(p: string, input: InputSpec): Promise<ComposedSheetRow[]> {
     let isDir = false;
     try {
       isDir = statSync(p).isDirectory();
     } catch {
       return [];
     }
-    if (!isDir) return composedRowsFromFiles([p]);
+    if (!isDir) return composedRowsFromFiles([p], input);
 
-    // A folder: prefer FASTQ pair inference; else recognize sequences by content.
-    const scan = scanFastqs(p);
-    if (scan.files.length > 0) {
-      return inferPairs(scan).map((pair) => ({
-        sample: pair.sample,
-        fastq_1: pair.fastq_1,
-        fastq_2: pair.fastq_2 ?? "",
-      }));
+    // A reads pipeline: prefer FASTQ pair inference. A single-file (e.g. FASTA)
+    // pipeline: one row per recognized sequence file.
+    if (input.reads) {
+      const scan = scanFastqs(p);
+      if (scan.files.length > 0) {
+        return inferPairs(scan).map((pair) => ({
+          sample: pair.sample,
+          fastq_1: pair.fastq_1,
+          fastq_2: pair.fastq_2 ?? "",
+        }));
+      }
     }
     const sniffed = await scanSequenceDir(p);
-    return composedRowsFromFiles(sniffed.sequences.map((s) => s.file));
+    return composedRowsFromFiles(
+      sniffed.sequences.map((s) => s.file),
+      input,
+    );
   }
 
   /** Asks for a path/value with `@` reference support; empty means skip. */

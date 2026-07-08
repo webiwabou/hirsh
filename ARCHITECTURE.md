@@ -70,7 +70,7 @@ src/
 ├── composition/      compose a pipeline from modules (Phase F4)
 │   ├── types.ts      CompositionPlan / ResolvedComposition
 │   ├── planner.ts    LLM: suggest tools → search registry → order into a plan
-│   ├── wiring.ts     channel-type matcher → runnable DSL2 workflow (pure)
+│   ├── wiring.ts     channel-type matcher → runnable DSL2 workflow; derives the entry input kind (reads vs single-file FASTA/…) via entryInputSpec (pure)
 │   ├── localModule.ts  custom (non-nf-core) tools → standards-compliant modules/local/ (Phase 4)
 │   ├── localToolProposal.ts  LLM proposes local tools for gaps the modules don't cover (Phase 4)
 │   ├── generator.ts  writes an nf-core-structured project + installs the modules

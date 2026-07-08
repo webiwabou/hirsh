@@ -516,9 +516,17 @@ one-off analysis into reusable, community-grade software.
     pairs, recognizing sequences by content when extensions are non-standard, or one
     row for a single file — instead of demanding a hand-written CSV
     (`composedRowsFromFiles`/`resolveComposedInput`, unit-tested).
-  - ⬜ Remaining: match the composed input *channel* to the actual data kind (today
-    the generator hard-codes a reads-style reader, so a protein FASTA is wired
-    generically); bundle realistic test data so the test profile gives *real*
+  - ✅ **Input channel matched to the real data kind.** The generator no longer
+    hard-codes a reads-style reader: it derives the entry input kind from the first
+    module's primary input (`entryInputSpec`) and emits the matching samplesheet
+    reader, `schema_input.json`, `take:` shape and test data — a reads pipeline gets
+    `sample,fastq_1[,fastq_2] → [meta, [reads]]`, a **protein/nucleotide FASTA**
+    pipeline gets `sample,fasta → [meta, fasta]` — and seeds the wiring environment
+    with that kind so a FASTA consumer anchors to the input. The own-data run path
+    builds the samplesheet with the correct column too
+    (`wiring.ts::entryInputSpec`/`inputColumn`, `run.ts::composedSheetHeader`,
+    pure/unit-tested; verified end-to-end by generating a FASTA-input project).
+  - ⬜ Remaining: bundle realistic test data so the test profile gives *real*
     results, not just a smoke test; and a fuller results interpretation from
     declared outputs.
 - ✅ **Provenance for novelty.** Generated projects separate what was reused from

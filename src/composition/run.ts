@@ -27,12 +27,10 @@ export interface ComposedRunOptions {
   test?: boolean;
 }
 
-/** A composed pipeline's samplesheet row (columns: sample,fastq_1,fastq_2). */
-export interface ComposedSheetRow {
-  sample: string;
-  fastq_1: string;
-  fastq_2: string;
-}
+import { inputColumn, type InputSpec } from "./wiring.js";
+
+/** A composed pipeline's samplesheet row (dynamic columns for the input kind). */
+export type ComposedSheetRow = Record<string, string>;
 
 /** A clean sample name from a file path (drops the extension and .gz). Pure. */
 export function sampleNameFromPath(path: string): string {
@@ -40,13 +38,24 @@ export function sampleNameFromPath(path: string): string {
   return base.replace(/[^A-Za-z0-9_.-]/g, "_") || "sample";
 }
 
+/** The samplesheet header columns for a composed pipeline's input kind. Pure. */
+export function composedSheetHeader(input: InputSpec): string[] {
+  return input.reads ? ["sample", "fastq_1", "fastq_2"] : ["sample", inputColumn(input.kind)];
+}
+
 /**
  * Builds samplesheet rows (one per file) for a composed pipeline, pointing each
- * file at `fastq_1` — the generic input column the composed reader expects, so a
- * scientist can hand over a FASTA/FASTQ instead of writing a CSV by hand. Pure.
+ * file at the column its input channel actually reads — `fastq_1` for a reads
+ * pipeline, or the single-file column (e.g. `fasta`) otherwise — so a scientist
+ * can hand over a FASTA/FASTQ instead of writing a CSV by hand. Pure.
  */
-export function composedRowsFromFiles(files: string[]): ComposedSheetRow[] {
-  return files.map((f) => ({ sample: sampleNameFromPath(f), fastq_1: f, fastq_2: "" }));
+export function composedRowsFromFiles(files: string[], input: InputSpec): ComposedSheetRow[] {
+  const col = input.reads ? "fastq_1" : inputColumn(input.kind);
+  return files.map((f) => {
+    const row: ComposedSheetRow = { sample: sampleNameFromPath(f), [col]: f };
+    if (input.reads) row.fastq_2 = "";
+    return row;
+  });
 }
 
 /** Builds the `nextflow run …` argument list for a composed pipeline. Pure. */

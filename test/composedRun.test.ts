@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildComposedRunCommand,
   composedRowsFromFiles,
+  composedSheetHeader,
   sampleNameFromPath,
 } from "../src/composition/run.js";
+
+const READS = { kind: "reads", reads: true };
+const FASTA = { kind: "fasta", reads: false };
 
 describe("buildComposedRunCommand", () => {
   it("builds a real run with input, outdir, reference params and executor config", () => {
@@ -47,12 +51,26 @@ describe("buildComposedRunCommand", () => {
     expect(cmd).not.toContain("--input");
   });
 
-  it("builds one samplesheet row per file, pointing at fastq_1", () => {
-    const rows = composedRowsFromFiles(["/data/hbz.fasta", "/data/s2.fastq.gz"]);
+  it("builds one samplesheet row per file, pointing at fastq_1 for a reads pipeline", () => {
+    const rows = composedRowsFromFiles(["/data/hbz.fasta", "/data/s2.fastq.gz"], READS);
     expect(rows).toEqual([
       { sample: "hbz", fastq_1: "/data/hbz.fasta", fastq_2: "" },
       { sample: "s2", fastq_1: "/data/s2.fastq.gz", fastq_2: "" },
     ]);
+  });
+
+  it("points each file at the single-file column for a non-reads (FASTA) pipeline", () => {
+    const rows = composedRowsFromFiles(["/data/hbz.fasta", "/data/p2.fasta"], FASTA);
+    expect(rows).toEqual([
+      { sample: "hbz", fasta: "/data/hbz.fasta" },
+      { sample: "p2", fasta: "/data/p2.fasta" },
+    ]);
+    expect(rows[0]).not.toHaveProperty("fastq_1");
+  });
+
+  it("chooses the samplesheet header for the input kind", () => {
+    expect(composedSheetHeader(READS)).toEqual(["sample", "fastq_1", "fastq_2"]);
+    expect(composedSheetHeader(FASTA)).toEqual(["sample", "fasta"]);
   });
 
   it("derives a clean sample name (drops extension and .gz)", () => {

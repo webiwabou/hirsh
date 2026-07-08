@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkflow, classifyKind } from "../src/composition/wiring.js";
+import { buildWorkflow, classifyKind, entryInputSpec, inputColumn } from "../src/composition/wiring.js";
 import type { NfCoreModule } from "../src/modules/types.js";
 
 function mod(
@@ -86,5 +86,42 @@ describe("buildWorkflow (channel-type matching)", () => {
   it("collects versions via the nf-core channel topic", () => {
     expect(wf).toContain("Channel.topic('versions')");
     expect(wf).not.toContain(".out.versions");
+  });
+
+  it("reports a reads input spec and reads-shaped take comment", () => {
+    expect(res.input).toEqual({ kind: "reads", reads: true });
+    expect(wf).toContain("[ val(meta), [ path(reads) ] ]");
+  });
+});
+
+describe("entryInputSpec (input-channel matching)", () => {
+  // A protein-family pipeline whose first module consumes a FASTA, not reads.
+  const hmmer = mod("hmmer/hmmsearch", [metaFile("fasta")], [
+    { name: "output", elements: [{ name: "meta", type: "map" }, { name: "*.txt", type: "file" }] },
+  ]);
+
+  it("derives reads from a reads-consuming first module", () => {
+    expect(entryInputSpec([fastqc])).toEqual({ kind: "reads", reads: true });
+  });
+
+  it("derives a single-file FASTA input from a FASTA-consuming first module", () => {
+    expect(entryInputSpec([hmmer])).toEqual({ kind: "fasta", reads: false });
+  });
+
+  it("falls back to reads with no modules", () => {
+    expect(entryInputSpec([])).toEqual({ kind: "reads", reads: true });
+  });
+
+  it("wires a FASTA input channel and single-file take comment", () => {
+    const res = buildWorkflow({ pipelineName: "prot", steps: [{ module: "hmmer/hmmsearch" }] }, [hmmer]);
+    expect(res.input.reads).toBe(false);
+    // The FASTA input anchors the first module directly to ch_input.
+    expect(res.workflow).toContain("HMMER_HMMSEARCH ( ch_input )");
+    expect(res.workflow).toContain("[ val(meta), path(fasta) ]");
+  });
+
+  it("maps a fasta kind to the fasta samplesheet column", () => {
+    expect(inputColumn("fasta")).toBe("fasta");
+    expect(inputColumn("bam")).toBe("bam");
   });
 });
