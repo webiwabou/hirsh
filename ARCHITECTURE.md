@@ -40,6 +40,7 @@ src/
 │   ├── answers.ts    lenient natural-language yes/no interpretation for confirmations
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
 │   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
+│   ├── samplesheetReview.ts  data-grounded design check on the built samplesheet (per-group replicate counts, balance) (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits
 │   ├── (pipelines/nfcoreSchema.ts)   synthesize a param interview + samplesheet columns from a catalog pipeline's own schemas (run it on real data)

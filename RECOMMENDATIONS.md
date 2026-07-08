@@ -577,8 +577,19 @@ The full realization: a scientific collaborator, not a command builder.
     carried into Phase E, where the interpretation revisits their impact and
     explains findings biologically in the context of the objective, ending with a
     concrete next step (`results/interpreter.ts`, prompt wiring unit-tested).
-  - ⬜ Remaining: fold the built samplesheet into the review (per-group replicate
-    counts) and suggest specific analyses/controls.
+  - ✅ **Grounded in the built samplesheet.** The review now reasons about what the
+    samplesheet actually *contains*, not only what was described: after Phase C
+    builds it, Hirsh finds the grouping column (condition/treatment/status…),
+    counts **biological replicates per group** (merging technical replicates that
+    share a sample id), and raises concrete, deterministic concerns — a group with
+    no replication (risk), the bare minimum of two (caution), or badly unbalanced
+    groups (caution) — surfacing the per-group counts even when the design is sound.
+    Advisory (the run confirmation is the decision point), and merged into
+    `session.designReview` so Phase E revisits them
+    (`conversation/samplesheetReview.ts::reviewSamplesheetContent`, pure/unit-tested).
+  - ⬜ Remaining: suggest specific analyses/controls (e.g. propose a missing
+    control or contrast); review the differential-abundance follow-up's condition
+    samplesheet too.
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool

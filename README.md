@@ -310,7 +310,10 @@ HTML reports (open them in your browser):
   design; asks for what is missing, one thing at a time.
 - **Design review** — before selecting a pipeline, Hirsh reviews the experimental
   design (biological replication, controls, confounders/batch effects, group
-  balance) and flags concerns with suggestions — advice, not a blocker.
+  balance) and flags concerns with suggestions — advice, not a blocker. Once the
+  samplesheet is built it reviews the design **again from the real data** —
+  counting biological replicates per group and flagging a group with no
+  replication, only two, or badly unbalanced groups.
 - **B · Selection** — picks the right curated nf-core pipeline (or honestly says
   none applies), lets you correct it, and — if none fits — **recommends an
   established nf-core pipeline** from the live catalog (offering to run its test
