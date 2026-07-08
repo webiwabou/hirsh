@@ -7,6 +7,7 @@ import {
   parseGeneralStats,
   prettyMetric,
   summarizeTable,
+  summarizeVcf,
 } from "../src/results/parsers.js";
 
 describe("summarizeTable", () => {
@@ -170,5 +171,41 @@ describe("countVcfRecords", () => {
       "",
     ].join("\n");
     expect(countVcfRecords(vcf)).toBe(2);
+  });
+});
+
+describe("summarizeVcf", () => {
+  const vcf = [
+    "##fileformat=VCFv4.2",
+    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER",
+    "chr1\t100\t.\tA\tG\t.\tPASS", // SNP, transition (A>G)
+    "chr1\t200\t.\tC\tA\t.\tPASS", // SNP, transversion (C>A)
+    "chr1\t300\t.\tAT\tA\t.\tPASS", // deletion (indel)
+    "chr1\t400\t.\tG\tGTT\t.\tPASS", // insertion (indel)
+    "chr1\t500\t.\tAC\tGT\t.\tPASS", // MNP
+    "chr1\t600\t.\tT\t<DEL>\t.\tPASS", // symbolic → other
+    "chr1\t700\t.\tG\tA,T\t.\tPASS", // multi-allelic: G>A (ts) + G>T (tv)
+  ].join("\n");
+
+  it("classifies SNPs, indels, MNPs and computes Ts/Tv", () => {
+    const s = summarizeVcf(vcf);
+    expect(s.records).toBe(7);
+    expect(s.snps).toBe(4); // A>G, C>A, and G>A + G>T from the multi-allelic
+    expect(s.indels).toBe(2);
+    expect(s.mnps).toBe(1);
+    expect(s.other).toBe(1); // <DEL>
+    expect(s.transitions).toBe(2); // A>G, G>A
+    expect(s.transversions).toBe(2); // C>A, G>T
+    expect(s.tstv).toBeCloseTo(1, 5);
+  });
+
+  it("returns null Ts/Tv when there are no transversions", () => {
+    const s = summarizeVcf("#CHROM\tPOS\tID\tREF\tALT\nchr1\t1\t.\tA\tG");
+    expect(s.snps).toBe(1);
+    expect(s.tstv).toBeNull();
+  });
+
+  it("ignores headers and malformed lines", () => {
+    expect(summarizeVcf("##only headers\n#CHROM\tPOS").records).toBe(0);
   });
 });

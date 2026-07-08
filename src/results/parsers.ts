@@ -370,3 +370,71 @@ export function countVcfRecords(text: string): number {
   }
   return n;
 }
+
+export interface VcfSummary {
+  /** Variant records (data lines). */
+  records: number;
+  /** ALT alleles classified (multi-allelic records contribute several). */
+  alleles: number;
+  snps: number;
+  indels: number;
+  mnps: number;
+  /** Symbolic/other ALTs (e.g. <DEL>, *) not classified above. */
+  other: number;
+  transitions: number;
+  transversions: number;
+  /** Transition/transversion ratio, or null when there are no transversions. */
+  tstv: number | null;
+}
+
+const TRANSITIONS = new Set(["AG", "GA", "CT", "TC"]);
+const BASE = /^[ACGT]$/;
+
+/**
+ * Summarizes a VCF's variant types — SNPs vs indels vs MNPs, and the
+ * transition/transversion ratio (a standard variant-calling QC metric) — from the
+ * REF/ALT columns. Multi-allelic records are split per ALT allele. Pure; ignores
+ * header lines. Good enough for interpretation, not a full VCF parser.
+ */
+export function summarizeVcf(text: string): VcfSummary {
+  const s: VcfSummary = {
+    records: 0,
+    alleles: 0,
+    snps: 0,
+    indels: 0,
+    mnps: 0,
+    other: 0,
+    transitions: 0,
+    transversions: 0,
+    tstv: null,
+  };
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const cols = line.split("\t");
+    if (cols.length < 5) continue;
+    s.records++;
+    const ref = (cols[3] ?? "").trim().toUpperCase();
+    const altField = (cols[4] ?? "").trim().toUpperCase();
+    if (ref === "" || altField === "" || altField === ".") continue;
+    for (const alt of altField.split(",")) {
+      s.alleles++;
+      if (alt === "" || alt === "*" || alt.startsWith("<") || alt.includes("[") || alt.includes("]")) {
+        s.other++;
+        continue;
+      }
+      if (ref.length === 1 && alt.length === 1 && BASE.test(ref) && BASE.test(alt)) {
+        s.snps++;
+        if (TRANSITIONS.has(ref + alt)) s.transitions++;
+        else s.transversions++;
+      } else if (ref.length !== alt.length) {
+        s.indels++;
+      } else if (ref.length === alt.length) {
+        s.mnps++;
+      } else {
+        s.other++;
+      }
+    }
+  }
+  s.tstv = s.transversions > 0 ? s.transitions / s.transversions : null;
+  return s;
+}

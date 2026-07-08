@@ -15,11 +15,11 @@ import type { ResultOutput } from "../pipelines/types.js";
 import type { QueryContext } from "../conversation/session.js";
 import {
   countDifferential,
-  countVcfRecords,
   extractVolcano,
   metricSeries,
   parseGeneralStats,
   summarizeTable,
+  summarizeVcf,
   type VolcanoData,
 } from "./parsers.js";
 import type { ChartData } from "./charts.js";
@@ -232,28 +232,51 @@ function describeDiffDir(
   return { detail, chart, volcanoes: volcanoes.slice(0, 6) };
 }
 
-function describeVcfDir(path: string): string {
+function describeVcfDir(path: string): { detail: string; chart?: ChartData } {
   const vcfs = walkVcfs(path);
-  if (vcfs.length === 0) return describeDirectory(path);
-  let total = 0;
+  if (vcfs.length === 0) return { detail: describeDirectory(path) };
+  let records = 0;
+  let snps = 0;
+  let indels = 0;
+  let mnps = 0;
+  let transitions = 0;
+  let transversions = 0;
   const perFile: string[] = [];
   for (const vcf of vcfs) {
     const text = readTextMaybeGzip(vcf);
     if (text === null) {
-      perFile.push(`${basename(vcf)}: (too large to count)`);
+      perFile.push(`${basename(vcf)}: (too large to summarize)`);
       continue;
     }
-    const n = countVcfRecords(text);
-    total += n;
-    perFile.push(`${basename(vcf)}: ${fmt(n)} variants`);
+    const s = summarizeVcf(text);
+    records += s.records;
+    snps += s.snps;
+    indels += s.indels;
+    mnps += s.mnps;
+    transitions += s.transitions;
+    transversions += s.transversions;
+    const tstv = s.tstv !== null ? `, Ts/Tv ${s.tstv.toFixed(2)}` : "";
+    perFile.push(`${basename(vcf)}: ${fmt(s.records)} variants (${fmt(s.snps)} SNPs, ${fmt(s.indels)} indels${tstv})`);
   }
-  return [
-    `${vcfs.length} VCF file(s), ${fmt(total)} variants total.`,
+  const overallTstv = transversions > 0 ? `, overall Ts/Tv ${(transitions / transversions).toFixed(2)}` : "";
+  const detail = [
+    `${vcfs.length} VCF file(s), ${fmt(records)} variants total: ${fmt(snps)} SNPs, ${fmt(indels)} indels` +
+      (mnps > 0 ? `, ${fmt(mnps)} MNPs` : "") +
+      overallTstv +
+      ".",
     ...perFile.slice(0, 8).map((l) => "    " + l),
     perFile.length > 8 ? "    …" : "",
   ]
     .filter(Boolean)
     .join("\n  ");
+
+  const typeItems = [
+    { label: "SNPs", value: snps },
+    { label: "indels", value: indels },
+    ...(mnps > 0 ? [{ label: "MNPs", value: mnps }] : []),
+  ].filter((i) => i.value > 0);
+  const chart = typeItems.length >= 2 ? { title: "Variant types", items: typeItems } : undefined;
+  return { detail, chart };
 }
 
 function basename(path: string): string {
@@ -302,7 +325,9 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
         detail = r.detail;
         if (r.chart) charts.push(r.chart);
       } else if (out.kind === "vcf_dir") {
-        detail = describeVcfDir(absPath);
+        const r = describeVcfDir(absPath);
+        detail = r.detail;
+        if (r.chart) charts.push(r.chart);
       } else if (out.kind === "de_table_dir") {
         const r = describeDiffDir(absPath, out.path);
         detail = r.detail;
