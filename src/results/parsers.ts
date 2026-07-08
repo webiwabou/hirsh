@@ -114,6 +114,45 @@ export function metricSeries(
   return out;
 }
 
+/**
+ * MultiQC per-tool data tables worth surfacing beyond the general-stats subset,
+ * mapping the file stem (`multiqc_<stem>.txt`) to a readable tool label. Kept to
+ * common alignment/QC tools so the report stays targeted, not a dump of every
+ * table MultiQC writes.
+ */
+export const MULTIQC_TOOL_TABLES: Record<string, string> = {
+  star: "STAR",
+  salmon: "Salmon",
+  hisat2: "HISAT2",
+  bowtie2: "Bowtie2",
+  bowtie1: "Bowtie",
+  picard_dups: "Picard (duplicates)",
+  picard_insertsize: "Picard (insert size)",
+  picard_alignmentsummary: "Picard (alignment)",
+  rseqc_read_distribution: "RSeQC (read distribution)",
+  rseqc_infer_experiment: "RSeQC (strandedness)",
+  rseqc_bam_stat: "RSeQC (BAM stats)",
+  samtools_flagstat: "Samtools (flagstat)",
+  samtools_stats: "Samtools (stats)",
+  fastp: "fastp",
+  cutadapt: "Cutadapt",
+  featurecounts: "featureCounts",
+  qualimap_rnaseq: "Qualimap (RNA-seq)",
+  qualimap_bamqc: "Qualimap (BAM QC)",
+};
+
+/**
+ * If a filename is a recognized MultiQC per-tool data table, returns its tool
+ * label; otherwise null. Accepts `multiqc_<stem>.txt` (case-insensitive). Pure.
+ */
+export function multiqcToolLabel(filename: string): string | null {
+  const m = /^multiqc_(.+)\.txt$/i.exec(filename.trim());
+  if (!m) return null;
+  const stem = m[1].toLowerCase();
+  if (stem === "general_stats" || stem === "sources" || stem === "software_versions") return null;
+  return MULTIQC_TOOL_TABLES[stem] ?? null;
+}
+
 /** Parses a MultiQC `multiqc_general_stats.txt` (TSV: Sample + metric columns). */
 export function parseGeneralStats(text: string): GeneralStats {
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);

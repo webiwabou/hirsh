@@ -223,8 +223,16 @@ Make every supported pipeline safe to run for real and make its output land as
     metric) per file and overall, with a "Variant types" bar chart, instead of a
     bare variant count (`results/parsers.ts::summarizeVcf`, pure/unit-tested;
     integration verified).
-  - ⬜ Remaining: per-tool MultiQC sections (RSeQC/Picard) beyond general-stats.
-    (MultiQC per-sample metric charts now render in the HTML report — see Phase 6.)
+  - ✅ **Per-tool MultiQC sections beyond general-stats.** The HTML report now also
+    reads MultiQC's per-tool data tables (STAR, Salmon, Picard, RSeQC, samtools,
+    HISAT2/Bowtie2, fastp, Qualimap, featureCounts…) next to the report and draws a
+    couple of per-sample bar charts each — richer QC (e.g. STAR uniquely-mapped %,
+    Picard duplication, RSeQC read distribution) than the general-stats subset.
+    Bounded (a handful of tools, ≤2 metrics each) and driven by an allowlist of
+    recognized table stems so it stays targeted, not a dump; unknown tables are
+    ignored (`results/parsers.ts::multiqcToolLabel`/`MULTIQC_TOOL_TABLES` +
+    `interpreter.ts::toolMetricCharts`, unit-tested; integration verified via
+    `gatherResults` on a fixture MultiQC data dir).
 - ✅ **Correct multi-sample designs.** sarek now asks per-sample patient +
   tumor/normal (grouped by patient) and warns when a patient lacks a matched
   normal; rnaseq supports per-sample strandedness (shared default + overrides);

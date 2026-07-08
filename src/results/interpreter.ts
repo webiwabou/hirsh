@@ -17,6 +17,7 @@ import {
   countDifferential,
   extractVolcano,
   metricSeries,
+  multiqcToolLabel,
   parseGeneralStats,
   summarizeTable,
   summarizeVcf,
@@ -104,8 +105,8 @@ function describeTable(path: string, label: string): { detail: string; chart?: C
   return { detail: parts.join(" "), chart };
 }
 
-/** Finds the MultiQC general-stats table sitting next to a MultiQC report. */
-function findGeneralStats(htmlPath: string): string | null {
+/** Locates the MultiQC `*_data` directory sitting next to a MultiQC report. */
+function findMultiqcDataDir(htmlPath: string): string | null {
   const dir = dirname(htmlPath);
   let entries: string[];
   try {
@@ -114,20 +115,54 @@ function findGeneralStats(htmlPath: string): string | null {
     return null;
   }
   const dataDir = entries.find((e) => e === "multiqc_data" || e.endsWith("_data"));
-  const candidates = [
-    dataDir ? join(dir, dataDir, "multiqc_general_stats.txt") : "",
-    join(dir, "multiqc_data", "multiqc_general_stats.txt"),
-  ].filter(Boolean);
-  return candidates.find((c) => existsSync(c)) ?? null;
+  for (const cand of [dataDir ? join(dir, dataDir) : "", join(dir, "multiqc_data")].filter(Boolean)) {
+    if (existsSync(cand)) return cand;
+  }
+  return null;
+}
+
+/**
+ * Per-tool metric charts beyond the general-stats subset: reads recognized
+ * MultiQC per-tool tables (STAR, Salmon, Picard, RSeQC, samtools…) and builds a
+ * few bar charts each, prefixed with the tool name. Bounded so the report stays
+ * light: a handful of tools, a couple of metrics each.
+ */
+function toolMetricCharts(dataDir: string): ChartData[] {
+  let files: string[];
+  try {
+    files = readdirSync(dataDir);
+  } catch {
+    return [];
+  }
+  const out: ChartData[] = [];
+  const maxTools = 4;
+  let tools = 0;
+  for (const file of files.sort()) {
+    if (tools >= maxTools) break;
+    const label = multiqcToolLabel(file);
+    if (!label) continue;
+    const text = readTextMaybeGzip(join(dataDir, file));
+    if (text === null) continue;
+    const g = parseGeneralStats(text);
+    if (g.sampleCount === 0) continue;
+    const charts = metricSeries(g, { maxMetrics: 2 }).map((c) => ({ ...c, title: `${label}: ${c.title}` }));
+    if (charts.length === 0) continue;
+    out.push(...charts);
+    tools++;
+  }
+  return out;
 }
 
 function describeMultiqc(htmlPath: string): { detail: string; metricCharts: ChartData[] } {
-  const stats = findGeneralStats(htmlPath);
-  if (!stats) return { detail: "HTML report available.", metricCharts: [] };
+  const dataDir = findMultiqcDataDir(htmlPath);
+  const stats = dataDir ? join(dataDir, "multiqc_general_stats.txt") : null;
+  const toolCharts = dataDir ? toolMetricCharts(dataDir) : [];
+  if (!stats || !existsSync(stats)) return { detail: "HTML report available.", metricCharts: toolCharts };
   const text = readTextMaybeGzip(stats);
-  if (text === null) return { detail: "HTML report available (general-stats table unreadable).", metricCharts: [] };
+  if (text === null)
+    return { detail: "HTML report available (general-stats table unreadable).", metricCharts: toolCharts };
   const g = parseGeneralStats(text);
-  if (g.sampleCount === 0) return { detail: "HTML report available.", metricCharts: [] };
+  if (g.sampleCount === 0) return { detail: "HTML report available.", metricCharts: toolCharts };
   const shownMetrics = g.metrics.slice(0, 4);
   const rows = g.perSample
     .slice(0, 8)
@@ -138,7 +173,7 @@ function describeMultiqc(htmlPath: string): { detail: string; metricCharts: Char
     `Metrics: ${shownMetrics.join(", ")}${g.metrics.length > 4 ? ", …" : ""}.`,
     `Per sample:\n    ${rows}${g.perSample.length > 8 ? "\n    …" : ""}`,
   ].join("\n  ");
-  return { detail, metricCharts: metricSeries(g) };
+  return { detail, metricCharts: [...metricSeries(g), ...toolCharts] };
 }
 
 /** Depth-bounded recursive file search matching a name predicate. */

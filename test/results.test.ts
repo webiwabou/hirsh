@@ -4,6 +4,7 @@ import {
   countVcfRecords,
   extractVolcano,
   metricSeries,
+  multiqcToolLabel,
   parseGeneralStats,
   parseTraceResources,
   prettyMetric,
@@ -78,6 +79,24 @@ describe("metricSeries", () => {
     const series = metricSeries(g, { maxMetrics: 1 });
     expect(series).toHaveLength(1);
     expect(series[0].title).toBe("m1"); // "tool" (non-numeric) skipped
+  });
+});
+
+describe("multiqcToolLabel", () => {
+  it("recognizes common per-tool MultiQC data tables", () => {
+    expect(multiqcToolLabel("multiqc_star.txt")).toBe("STAR");
+    expect(multiqcToolLabel("multiqc_picard_dups.txt")).toBe("Picard (duplicates)");
+    expect(multiqcToolLabel("multiqc_rseqc_read_distribution.txt")).toBe("RSeQC (read distribution)");
+    expect(multiqcToolLabel("multiqc_samtools_flagstat.txt")).toBe("Samtools (flagstat)");
+  });
+
+  it("ignores general_stats, bookkeeping tables and unknown/non-matching files", () => {
+    expect(multiqcToolLabel("multiqc_general_stats.txt")).toBeNull();
+    expect(multiqcToolLabel("multiqc_sources.txt")).toBeNull();
+    expect(multiqcToolLabel("multiqc_software_versions.txt")).toBeNull();
+    expect(multiqcToolLabel("multiqc_some_unknown_tool.txt")).toBeNull();
+    expect(multiqcToolLabel("multiqc_star.json")).toBeNull();
+    expect(multiqcToolLabel("random.txt")).toBeNull();
   });
 });
 
