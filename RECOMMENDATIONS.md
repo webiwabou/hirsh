@@ -205,7 +205,12 @@ Make every supported pipeline safe to run for real and make its output land as
   from count matrices, significant genes per contrast — so the scientist sees the
   shape of the data at a glance (`results/charts.ts::renderBarChart`, unit-tested;
   shown for primary, follow-up and composed runs).
-  - ⬜ Remaining: per-tool detail (RSeQC/Picard sections, variant-type breakdowns).
+  - ✅ **Variant-type breakdown.** VCF interpretation now reports the SNP/indel/MNP
+    split and the **transition/transversion ratio** (a standard variant-calling QC
+    metric) per file and overall, with a "Variant types" bar chart, instead of a
+    bare variant count (`results/parsers.ts::summarizeVcf`, pure/unit-tested;
+    integration verified).
+  - ⬜ Remaining: per-tool MultiQC sections (RSeQC/Picard) beyond general-stats.
     (MultiQC per-sample metric charts now render in the HTML report — see Phase 6.)
 - ✅ **Correct multi-sample designs.** sarek now asks per-sample patient +
   tumor/normal (grouped by patient) and warns when a patient lacks a matched

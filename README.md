@@ -334,9 +334,10 @@ HTML reports (open them in your browser):
   it offers to **re-run** — reusing cached results with `-resume`, or after
   changing one parameter — without redoing the whole setup.
 - **E · Interpretation** — locates the outputs, extracts concrete numbers
-  (per-sample library sizes from count matrices, MultiQC per-sample metrics,
-  variant counts from VCFs), shows a **compact inline bar chart** of the key
-  figures, and explains the findings **biologically** in the
+  (per-sample library sizes from count matrices, MultiQC per-sample metrics, and
+  the SNP/indel breakdown with the transition/transversion ratio from VCFs), shows
+  a **compact inline bar chart** of the key figures, and explains the findings
+  **biologically** in the
   context of your objective — revisiting any design caveats flagged before the run
   (e.g. a batch effect) and ending with a concrete next step. It writes a
   **shareable `REPORT.html`** into the run directory — the interpretation, the key
