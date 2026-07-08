@@ -1477,6 +1477,7 @@ export class Agent {
           detail: o.detail,
         })),
         charts: report.charts ?? [],
+        volcanoFigures: report.volcanoFigures,
         summaryText,
         htmlReports: report.htmlReports,
         artifacts,

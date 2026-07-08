@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   countDifferential,
   countVcfRecords,
+  extractVolcano,
   parseGeneralStats,
   summarizeTable,
 } from "../src/results/parsers.js";
@@ -86,6 +87,42 @@ describe("countDifferential", () => {
     expect(d.padjColumn).toBeNull();
     expect(d.total).toBe(2);
     expect(d.significant).toBe(0);
+  });
+});
+
+describe("extractVolcano", () => {
+  const tsv = [
+    "gene_id\tlog2FoldChange\tpadj",
+    "A\t3.0\t0.001", // up (sig)
+    "B\t-2.5\t0.01", // down (sig)
+    "C\t0.2\t0.9", // ns (small fc, high padj)
+    "D\t4.0\tNA", // dropped (NA padj)
+    "E\t0.0\t0.001", // ns (fc below threshold)
+  ].join("\n");
+
+  it("classifies up/down/ns points and maps -log10(padj)", () => {
+    const v = extractVolcano(tsv)!;
+    expect(v).not.toBeNull();
+    expect(v.up).toBe(1);
+    expect(v.down).toBe(1);
+    expect(v.plotted).toBe(4); // A,B,C,E (D dropped for NA)
+    const up = v.points.find((p) => p.cls === "up")!;
+    expect(up.x).toBe(3.0);
+    expect(up.y).toBeCloseTo(3, 5); // -log10(0.001)
+  });
+
+  it("returns null without a fold-change column (a volcano needs it)", () => {
+    expect(extractVolcano("gene\tpadj\nA\t0.01\nB\t0.2")).toBeNull();
+  });
+
+  it("keeps all significant points and down-samples ns to the cap", () => {
+    const rows = ["gene\tlog2FoldChange\tpadj"];
+    for (let i = 0; i < 50; i++) rows.push(`ns${i}\t0.1\t0.9`); // 50 ns
+    rows.push("sig1\t5\t0.0001", "sig2\t-5\t0.0001"); // 2 sig
+    const v = extractVolcano(rows.join("\n"), { cap: 10 })!;
+    expect(v.points.length).toBe(10); // 2 sig + 8 sampled ns
+    expect(v.up + v.down).toBe(2);
+    expect(v.plotted).toBe(52);
   });
 });
 

@@ -13,7 +13,14 @@ import { dirname, join, relative, resolve } from "node:path";
 import type { LLMProvider, ChatMessage } from "../llm/index.js";
 import type { ResultOutput } from "../pipelines/types.js";
 import type { QueryContext } from "../conversation/session.js";
-import { countDifferential, countVcfRecords, parseGeneralStats, summarizeTable } from "./parsers.js";
+import {
+  countDifferential,
+  countVcfRecords,
+  extractVolcano,
+  parseGeneralStats,
+  summarizeTable,
+  type VolcanoData,
+} from "./parsers.js";
 import type { ChartData } from "./charts.js";
 
 /**
@@ -35,6 +42,11 @@ export interface GatheredOutput {
   detail: string;
 }
 
+export interface VolcanoFigure {
+  title: string;
+  data: VolcanoData;
+}
+
 export interface ResultsReport {
   outdir: string;
   outputs: GatheredOutput[];
@@ -42,6 +54,8 @@ export interface ResultsReport {
   htmlReports: string[];
   /** Small inline charts of the key numbers, for the terminal. */
   charts?: ChartData[];
+  /** Differential-expression volcano plots (per contrast), for the HTML report. */
+  volcanoFigures?: VolcanoFigure[];
 }
 
 const MAX_READ_BYTES = 60_000_000;
@@ -172,10 +186,14 @@ export function listRelativeFiles(root: string, cap = 600): string[] {
  * concrete numbers: how many genes were significant (and up/down) per contrast.
  * Falls back to a plain directory listing when no differential tables are found.
  */
-function describeDiffDir(path: string, label: string): { detail: string; chart?: ChartData } {
+function describeDiffDir(
+  path: string,
+  label: string,
+): { detail: string; chart?: ChartData; volcanoes: VolcanoFigure[] } {
   const files = walkFiles(path, (e) => /\.(tsv|csv|txt)(\.gz)?$/i.test(e), 60, 4);
   const lines: string[] = [];
   const items: ChartData["items"] = [];
+  const volcanoes: VolcanoFigure[] = [];
   let contrasts = 0;
   let totalSig = 0;
   for (const file of files) {
@@ -185,14 +203,20 @@ function describeDiffDir(path: string, label: string): { detail: string; chart?:
     if (!d.padjColumn) continue; // not a differential table
     contrasts++;
     totalSig += d.significant;
-    items.push({ label: basename(file).replace(/\.(tsv|csv|txt)(\.gz)?$/i, ""), value: d.significant });
+    const contrast = basename(file).replace(/\.(tsv|csv|txt)(\.gz)?$/i, "");
+    items.push({ label: contrast, value: d.significant });
     const thresh = `padj<${d.alpha}${d.lfcColumn ? `, |log2FC|>${d.lfcThreshold}` : ""}`;
     lines.push(
       `${basename(file)}: ${fmt(d.significant)} of ${fmt(d.tested)} tested genes significant (${thresh})` +
         (d.lfcColumn ? ` — ${fmt(d.up)} up, ${fmt(d.down)} down` : ""),
     );
+    // A volcano needs fold-change; only tables with both columns yield one.
+    const volcano = extractVolcano(text);
+    if (volcano && volcano.points.length > 0) {
+      volcanoes.push({ title: `${contrast} — volcano (log2FC vs -log10 padj)`, data: volcano });
+    }
   }
-  if (contrasts === 0) return { detail: describeDirectory(path) };
+  if (contrasts === 0) return { detail: describeDirectory(path), volcanoes: [] };
   const detail = [
     `${contrasts} contrast(s), ${fmt(totalSig)} significant gene(s) total.`,
     ...lines.slice(0, 8).map((l) => "    " + l),
@@ -201,7 +225,7 @@ function describeDiffDir(path: string, label: string): { detail: string; chart?:
     .filter(Boolean)
     .join("\n  ");
   const chart = items.length >= 2 ? { title: `${label} — significant genes per contrast`, items } : undefined;
-  return { detail, chart };
+  return { detail, chart, volcanoes: volcanoes.slice(0, 6) };
 }
 
 function describeVcfDir(path: string): string {
@@ -256,6 +280,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
   const outputs: GatheredOutput[] = [];
   const htmlReports: string[] = [];
   const charts: ChartData[] = [];
+  const volcanoFigures: VolcanoFigure[] = [];
 
   for (const out of pipeline.results.outputs) {
     const absPath = join(absOut, out.path);
@@ -275,6 +300,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
         const r = describeDiffDir(absPath, out.path);
         detail = r.detail;
         if (r.chart) charts.push(r.chart);
+        volcanoFigures.push(...r.volcanoes);
       } else if (safeIsDir(absPath)) {
         detail = describeDirectory(absPath);
       } else {
@@ -284,7 +310,7 @@ export function gatherResults(pipeline: InterpretablePipeline, outdir: string): 
     outputs.push({ output: out, absPath, found, detail });
   }
 
-  return { outdir: absOut, outputs, htmlReports, charts };
+  return { outdir: absOut, outputs, htmlReports, charts, volcanoFigures };
 }
 
 /** Generates the plain-language results summary using the LLM. */

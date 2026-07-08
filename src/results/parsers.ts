@@ -128,6 +128,19 @@ function findColumn(header: string[], match: (h: string) => boolean): { name: st
   return null;
 }
 
+type DeColumn = { name: string; idx: number } | null;
+
+/** Detects the adjusted-p-value and log2-fold-change columns from a DE header. */
+function detectDeColumns(header: string[]): { padj: DeColumn; lfc: DeColumn } {
+  const padj =
+    findColumn(header, (h) => PADJ_NAMES.has(h)) ??
+    findColumn(header, (h) => h.includes("padj") || h.includes("adj.p") || h.includes("fdr") || h.includes("qvalue"));
+  const lfc =
+    findColumn(header, (h) => h === "log2foldchange" || h === "log2fc" || h === "logfc") ??
+    findColumn(header, (h) => h.includes("log2fold") || h.includes("log2fc") || h.includes("logfc"));
+  return { padj, lfc };
+}
+
 function isNa(v: string | undefined): boolean {
   if (v === undefined) return true;
   const t = v.trim().toLowerCase();
@@ -162,12 +175,7 @@ export function countDifferential(
   if (lines.length < 2) return empty;
 
   const header = lines[0].split(delim);
-  const padj =
-    findColumn(header, (h) => PADJ_NAMES.has(h)) ??
-    findColumn(header, (h) => h.includes("padj") || h.includes("adj.p") || h.includes("fdr") || h.includes("qvalue"));
-  const lfc =
-    findColumn(header, (h) => h === "log2foldchange" || h === "log2fc" || h === "logfc") ??
-    findColumn(header, (h) => h.includes("log2fold") || h.includes("log2fc") || h.includes("logfc"));
+  const { padj, lfc } = detectDeColumns(header);
 
   const dataLines = lines.slice(1);
   if (!padj) {
@@ -210,6 +218,86 @@ export function countDifferential(
     up,
     down,
   };
+}
+
+export interface VolcanoPoint {
+  /** log2 fold-change. */
+  x: number;
+  /** -log10(adjusted p-value). */
+  y: number;
+  cls: "up" | "down" | "ns";
+}
+
+export interface VolcanoData {
+  points: VolcanoPoint[];
+  alpha: number;
+  lfcThreshold: number;
+  /** Data rows with a usable (padj, log2FC) pair. */
+  plotted: number;
+  up: number;
+  down: number;
+}
+
+/** -log10 with a floor so p=0 (or underflow) maps to a finite, large y. */
+function negLog10(p: number): number {
+  return -Math.log10(Math.max(p, 1e-300));
+}
+
+/**
+ * Extracts volcano-plot points (log2FC vs -log10 padj) from a differential-
+ * expression table. Needs BOTH a padj and a log2FC column (returns null
+ * otherwise — a volcano is meaningless without fold-change). Significant points
+ * (padj<alpha and |log2FC|>threshold) are always kept; non-significant points are
+ * down-sampled to stay within `cap` so the inline SVG stays small. Pure.
+ */
+export function extractVolcano(
+  text: string,
+  opts: { alpha?: number; lfcThreshold?: number; cap?: number } = {},
+): VolcanoData | null {
+  const alpha = opts.alpha ?? 0.05;
+  const lfcThreshold = opts.lfcThreshold ?? 1;
+  const cap = opts.cap ?? 2000;
+  const { delim, lines } = splitDelimited(text);
+  if (lines.length < 2) return null;
+  const { padj, lfc } = detectDeColumns(lines[0].split(delim));
+  if (!padj || !lfc) return null;
+
+  const sig: VolcanoPoint[] = [];
+  const ns: VolcanoPoint[] = [];
+  let up = 0;
+  let down = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(delim);
+    const pRaw = cells[padj.idx];
+    const fRaw = cells[lfc.idx];
+    if (isNa(pRaw) || isNa(fRaw)) continue;
+    const p = Number(pRaw);
+    const f = Number(fRaw);
+    if (Number.isNaN(p) || Number.isNaN(f)) continue;
+    const significant = p < alpha && Math.abs(f) > lfcThreshold;
+    const cls: VolcanoPoint["cls"] = significant ? (f > 0 ? "up" : "down") : "ns";
+    if (significant) {
+      if (f > 0) up++;
+      else down++;
+      sig.push({ x: f, y: negLog10(p), cls });
+    } else {
+      ns.push({ x: f, y: negLog10(p), cls });
+    }
+  }
+  if (sig.length === 0 && ns.length === 0) return null;
+
+  // Keep all significant points; down-sample non-significant to fill the budget.
+  const budget = Math.max(0, cap - sig.length);
+  let keptNs = ns;
+  if (ns.length > budget && budget > 0) {
+    const stride = ns.length / budget;
+    keptNs = [];
+    for (let k = 0; k < budget; k++) keptNs.push(ns[Math.floor(k * stride)]);
+  } else if (budget === 0) {
+    keptNs = [];
+  }
+
+  return { points: [...keptNs, ...sig], alpha, lfcThreshold, plotted: sig.length + ns.length, up, down };
 }
 
 /**

@@ -2,8 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   chartToSvg,
   renderResultsReportHtml,
+  volcanoToSvg,
   type ResultsReportInput,
 } from "../src/results/report.js";
+import type { VolcanoData } from "../src/results/parsers.js";
+
+const VOLCANO: VolcanoData = {
+  points: [
+    { x: 3, y: 3, cls: "up" },
+    { x: -2.5, y: 2, cls: "down" },
+    { x: 0.1, y: 0.2, cls: "ns" },
+  ],
+  alpha: 0.05,
+  lfcThreshold: 1,
+  plotted: 3,
+  up: 1,
+  down: 1,
+};
 
 describe("chartToSvg", () => {
   it("renders a bar per item, scaled to the max, with escaped labels", () => {
@@ -22,6 +37,23 @@ describe("chartToSvg", () => {
 
   it("returns empty string for no items", () => {
     expect(chartToSvg({ title: "empty", items: [] })).toBe("");
+  });
+});
+
+describe("volcanoToSvg", () => {
+  it("draws a circle per point and threshold guides, coloured by class", () => {
+    const svg = volcanoToSvg(VOLCANO);
+    expect(svg).toMatch(/^<svg /);
+    expect((svg.match(/<circle /g) ?? []).length).toBe(3);
+    expect((svg.match(/<line /g) ?? []).length).toBe(5); // 3 guides + 2 axes
+    expect(svg).toContain("#dc2626"); // up colour
+    expect(svg).toContain("#2563eb"); // down colour
+    expect(svg).toContain("log2 fold-change");
+    expect(svg).toContain("up 1");
+  });
+
+  it("returns empty string for no points", () => {
+    expect(volcanoToSvg({ ...VOLCANO, points: [] })).toBe("");
   });
 });
 
@@ -64,6 +96,15 @@ describe("renderResultsReportHtml", () => {
   it("links the MultiQC report and artifacts", () => {
     expect(html).toContain('href="/runs/rnaseq/results/multiqc/report.html"');
     expect(html).toContain("METHODS.md");
+  });
+
+  it("embeds volcano figures when provided", () => {
+    const withVolcano = renderResultsReportHtml({
+      ...BASE,
+      volcanoFigures: [{ title: "tumor vs normal — volcano", data: VOLCANO }],
+    });
+    expect(withVolcano).toContain("tumor vs normal — volcano");
+    expect((withVolcano.match(/<circle /g) ?? []).length).toBe(3);
   });
 
   it("escapes HTML in the interpretation prose", () => {
