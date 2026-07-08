@@ -622,7 +622,12 @@ The full realization: a scientific collaborator, not a command builder.
     be separated from biology) or, when batch crosses conditions, recommends
     modelling it as a **covariate** (`~ batch + condition`)
     (`samplesheetReview.ts::classifyBatchDesign`, pure/unit-tested).
-  - ⬜ Remaining: propose contrasts for a multi-factor design (interactions).
+  - ✅ **Blocking factor in the contrasts.** When a batch **crosses** the
+    conditions, the proposed contrasts carry it as a `blocking` factor (the CSV
+    gains a blocking column) so differentialabundance models the batch out; a
+    *confounded* batch is not added (it isn't a usable covariate)
+    (`contrasts.ts::proposeContrasts`/`proposeContrastsFromSheet`, unit-tested).
+  - ⬜ Remaining: propose interaction contrasts for a full multi-factor design.
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool
