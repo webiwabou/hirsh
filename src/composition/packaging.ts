@@ -119,6 +119,65 @@ __pycache__/
 `;
 }
 
+export function renderEditorConfig(): string {
+  return `root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_size = 4
+indent_style = space
+
+[*.{md,yml,yaml,cff}]
+indent_size = 2
+
+[*.{nf,config}]
+indent_size = 4
+`;
+}
+
+export function renderGitattributes(): string {
+  return `*.config linguist-language=nextflow
+*.nf linguist-language=nextflow
+modules/nf-core/** linguist-generated
+`;
+}
+
+export function renderContributing(spec: PackageSpec): string {
+  return `# Contributing to ${spec.pipelineName}
+
+Contributions are welcome. Please open an issue to discuss a change before a large
+pull request, keep changes focused, and make sure the stub test passes
+(\`nextflow run . -profile test -stub-run --outdir results_test\`).
+
+This project follows the [nf-core](https://nf-co.re) conventions.
+`;
+}
+
+export function renderPullRequestTemplate(spec: PackageSpec): string {
+  return `## PR checklist
+
+- [ ] This comment contains a description of the changes (with reason).
+- [ ] The stub test passes (\`nextflow run . -profile test -stub-run --outdir results_test\`).
+- [ ] Documentation (\`docs/usage.md\`, \`docs/output.md\`) is updated if needed.
+- [ ] \`CHANGELOG.md\` is updated.
+
+<!-- ${spec.pipelineName} -->
+`;
+}
+
+export function renderCitationCff(spec: PackageSpec): string {
+  return `cff-version: 1.2.0
+message: "If you use ${spec.pipelineName}, please cite it as below."
+title: "${spec.pipelineName}"
+authors:
+  - name: "${spec.author}"
+${spec.homePage ? `repository-code: "${homePageUrl(spec.homePage)}"\n` : ""}license: MIT
+`;
+}
+
 export function renderCiWorkflow(): string {
   return `name: CI
 # Runs the pipeline's stub test on push/PR to catch breakages early.
@@ -219,7 +278,12 @@ export function packagePipeline(dir: string, spec: PackageSpec): PackageResult {
   write("CHANGELOG.md", renderChangelog(spec));
   write("CODE_OF_CONDUCT.md", renderCodeOfConduct());
   write(".gitignore", renderGitignore());
+  write(".editorconfig", renderEditorConfig());
+  write(".gitattributes", renderGitattributes());
+  write("CITATION.cff", renderCitationCff(spec));
   write(".github/workflows/ci.yml", renderCiWorkflow());
+  write(".github/CONTRIBUTING.md", renderContributing(spec));
+  write(".github/PULL_REQUEST_TEMPLATE.md", renderPullRequestTemplate(spec));
   write("docs/usage.md", renderUsageDoc(spec));
   write("docs/output.md", renderOutputDoc(spec));
 

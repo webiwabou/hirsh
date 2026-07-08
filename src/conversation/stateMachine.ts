@@ -100,6 +100,7 @@ import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
 import { generatePipeline, type GenerationResult } from "../composition/generator.js";
 import { lintPipeline, stubRun, validateGenerated } from "../composition/validate.js";
+import { planLintFixes, shouldContinueFixing, stripNfCoreTodos } from "../composition/lintFix.js";
 import {
   buildComposedRunCommand,
   composedRowsFromFiles,
@@ -1671,20 +1672,76 @@ export class Agent {
       this.io.info("git not found — skipping repository initialization.");
     }
 
-    // Re-run lint to show the packaging improved the score.
-    if (nfCoreAvailable) {
-      const lint = await this.io.withSpinner("Re-running nf-core lint after packaging", () =>
-        lintPipeline(dir),
-      );
-      if (lint.ran && lint.failed != null) {
-        this.io.info(
-          `nf-core lint (after packaging): ${lint.passed ?? 0} passed, ${lint.warned ?? 0} warnings, ${lint.failed} failed.`,
-        );
-      }
-    }
+    // Iterate lint → auto-fix → lint until green or the failures stop improving.
+    if (nfCoreAvailable) await this.iterateLintFixes(dir, spec);
 
     await this.offerPublish(dir, resolved);
     await this.offerInclusionGuide(dir, resolved.plan.pipelineName);
+  }
+
+  /**
+   * Phase 5 — the local quality gate iterating toward green. Runs `nf-core lint`,
+   * applies the fixes Hirsh can make (re-package missing files/manifest, strip
+   * template TODOs), and re-lints — up to a few rounds — stopping when the project
+   * is lint-clean or the failure count stops improving. Honest: remaining failures
+   * (e.g. `files_unchanged`, schema specifics) need the full template or manual work.
+   */
+  private async iterateLintFixes(dir: string, spec: PackageSpec): Promise<void> {
+    const MAX_ROUNDS = 3;
+    let previousFailed = Number.POSITIVE_INFINITY;
+    const trajectory: number[] = [];
+
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const lint = await this.io.withSpinner(
+        round === 0 ? "Running nf-core lint" : "Re-running nf-core lint after fixes",
+        () => lintPipeline(dir),
+      );
+      if (!lint.ran || lint.failed == null) {
+        this.io.warn("Couldn't run nf-core lint: " + (lint.error ?? "unknown error"));
+        return;
+      }
+      trajectory.push(lint.failed);
+      this.io.info(
+        `nf-core lint: ${lint.passed ?? 0} passed, ${lint.warned ?? 0} warnings, ${lint.failed} failed.`,
+      );
+      if (lint.failed === 0) {
+        this.io.say("✓ The project is lint-clean.");
+        break;
+      }
+
+      const plan = planLintFixes(lint.findings);
+      if (!shouldContinueFixing(lint, previousFailed, plan)) {
+        for (const f of lint.findings.slice(0, 6)) this.io.info("  ✗ " + f);
+        this.io.info(
+          "I've applied every fix I can. The remaining failures need the full nf-core template " +
+            "or manual edits (e.g. files_unchanged, schema specifics) before a green lint.",
+        );
+        break;
+      }
+      this.io.info(`Applying automatic fixes${plan.stripTodos ? " (incl. removing template TODOs)" : ""}…`);
+      this.applyLintFixes(dir, spec, plan);
+      previousFailed = lint.failed;
+    }
+    if (trajectory.length > 1) this.io.info(`Lint failures across rounds: ${trajectory.join(" → ")}.`);
+  }
+
+  /** Applies a lint fix plan: re-package (idempotent) and/or strip template TODOs. */
+  private applyLintFixes(dir: string, spec: PackageSpec, plan: ReturnType<typeof planLintFixes>): void {
+    if (plan.repackage) packagePipeline(dir, spec);
+    if (plan.stripTodos) {
+      for (const rel of listRelativeFiles(dir)) {
+        // Only Hirsh-owned files — never rewrite pinned nf-core modules.
+        if (!/\.(nf|config)$/.test(rel)) continue;
+        if (rel.includes("modules/nf-core/") || rel.includes("subworkflows/nf-core/")) continue;
+        const full = join(dir, rel);
+        try {
+          const { text, removed } = stripNfCoreTodos(readFileSync(full, "utf8"));
+          if (removed > 0) writeFileSync(full, text, "utf8");
+        } catch {
+          /* skip unreadable files */
+        }
+      }
+    }
   }
 
   /**

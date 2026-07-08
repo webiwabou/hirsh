@@ -3,7 +3,11 @@ import {
   homePageUrl,
   patchManifest,
   renderChangelog,
+  renderCitationCff,
+  renderContributing,
+  renderEditorConfig,
   renderMitLicense,
+  renderPullRequestTemplate,
   type PackageSpec,
 } from "../src/composition/packaging.js";
 
@@ -47,6 +51,23 @@ describe("renderChangelog", () => {
     const cl = renderChangelog(spec);
     expect(cl).toContain("customqc: Changelog");
     expect(cl).toContain("v1.0.0dev");
+  });
+});
+
+describe("standard nf-core files", () => {
+  it("renders an .editorconfig with a root marker", () => {
+    expect(renderEditorConfig()).toMatch(/^root = true/);
+  });
+  it("names the pipeline and author in CITATION.cff", () => {
+    const cff = renderCitationCff(spec);
+    expect(cff).toMatch(/cff-version:/);
+    expect(cff).toContain("customqc");
+    expect(cff).toContain("Dr. Ada Lovelace");
+    expect(cff).toContain("github.com/alovelace/customqc");
+  });
+  it("renders CONTRIBUTING and a PR template naming the pipeline", () => {
+    expect(renderContributing(spec)).toContain("Contributing to customqc");
+    expect(renderPullRequestTemplate(spec)).toMatch(/PR checklist/);
   });
 });
 
