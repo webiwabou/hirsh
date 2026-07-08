@@ -35,6 +35,8 @@ export interface RunRecord {
   queue?: string;
   executed: boolean;
   exitCode?: number;
+  /** Real peak memory (GB) observed from the run's Nextflow trace, if available. */
+  peakMemoryGB?: number;
 }
 
 export interface MemoryData {
@@ -80,6 +82,20 @@ export function extractReferences(
 /** Prepends a run record, keeping the list bounded (newest first). Pure. */
 export function addRun(data: MemoryData, record: RunRecord): MemoryData {
   return { version: 1, consent: data.consent, runs: [record, ...data.runs].slice(0, MAX_RUNS) };
+}
+
+/**
+ * The peak memory (GB) observed for the most recent successful run of a pipeline,
+ * or null if none recorded — so a pre-flight can show real usage next to the
+ * curated estimate. Pure; scans newest-first.
+ */
+export function lastPeakMemoryFor(data: MemoryData, pipeline: string): number | null {
+  for (const r of data.runs) {
+    if (r.pipeline === pipeline && typeof r.peakMemoryGB === "number" && r.peakMemoryGB > 0) {
+      return r.peakMemoryGB;
+    }
+  }
+  return null;
 }
 
 function norm(s?: string): string {

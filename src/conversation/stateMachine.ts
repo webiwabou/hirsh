@@ -33,6 +33,7 @@ import {
   defaultMemoryPath,
   emptyMemory,
   extractReferences,
+  lastPeakMemoryFor,
   loadMemory,
   preferredEnvironment,
   relevantRuns,
@@ -1555,21 +1556,26 @@ export class Agent {
    * execution trace — so the scientist knows how to size future runs. Best-effort.
    */
   private reportPeakMemory(outdir: string): void {
+    const res = this.readPeakMemory(outdir);
+    if (res?.maxPeakRssGB && res.processes.length > 0) {
+      this.io.info(
+        `Peak memory observed: ${res.maxPeakRssGB.toFixed(1)} GB (${res.processes[0].name}) — ` +
+          "useful for sizing future runs.",
+      );
+    }
+  }
+
+  /** Reads real per-process peak memory from a run's Nextflow trace. Best-effort. */
+  private readPeakMemory(outdir: string): ReturnType<typeof parseTraceResources> | null {
     const dir = join(outdir, "pipeline_info");
     try {
       const files = readdirSync(dir)
         .filter((f) => /execution_trace.*\.txt$/i.test(f))
         .sort();
-      if (files.length === 0) return;
-      const res = parseTraceResources(readFileSync(join(dir, files[files.length - 1]), "utf8"));
-      if (res.maxPeakRssGB && res.processes.length > 0) {
-        this.io.info(
-          `Peak memory observed: ${res.maxPeakRssGB.toFixed(1)} GB (${res.processes[0].name}) — ` +
-            "useful for sizing future runs.",
-        );
-      }
+      if (files.length === 0) return null;
+      return parseTraceResources(readFileSync(join(dir, files[files.length - 1]), "utf8"));
     } catch {
-      /* trace missing/unreadable — best-effort */
+      return null;
     }
   }
 
@@ -2007,6 +2013,10 @@ export class Agent {
         queue: session.executor?.queue,
         executed,
         exitCode,
+        peakMemoryGB:
+          executed && session.outdir
+            ? (this.readPeakMemory(session.outdir)?.maxPeakRssGB ?? undefined)
+            : undefined,
       };
       this.memory = addRun(this.mem(), record);
       saveMemory(this.memoryPath(), this.memory);
@@ -2045,6 +2055,16 @@ export class Agent {
     }
 
     const available = this.availableBudget();
+
+    // Reality check from memory: a past run of this pipeline's real peak memory.
+    const observedPeak = this.memoryEnabled() ? lastPeakMemoryFor(this.mem(), pipeline.name) : null;
+    if (observedPeak) {
+      this.io.info(
+        `From your project memory: a past ${pipeline.name} run actually peaked at ` +
+          `${observedPeak.toFixed(1)} GB — a real-usage check on the estimate below.`,
+      );
+    }
+
     // Params the user actually provided (non-empty) — a prebuilt index/reference
     // lets the model skip the corresponding indexing step's memory floor.
     const providedParams = new Set(

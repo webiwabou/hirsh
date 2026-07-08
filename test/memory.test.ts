@@ -8,6 +8,7 @@ import {
   emptyMemory,
   extractReferences,
   knownReferences,
+  lastPeakMemoryFor,
   loadMemory,
   preferredEnvironment,
   relevantRuns,
@@ -33,6 +34,21 @@ describe("defaultMemoryPath", () => {
   });
   it("falls back to the machine-global location without a base dir", () => {
     expect(defaultMemoryPath()).toMatch(/\.bioagent[/\\]memory\.json$/);
+  });
+});
+
+describe("lastPeakMemoryFor", () => {
+  it("returns the newest recorded peak for a pipeline, ignoring others/absent", () => {
+    let m = emptyMemory();
+    m = addRun(m, run({ pipeline: "nf-core/rnaseq", peakMemoryGB: 28 }));
+    m = addRun(m, run({ pipeline: "nf-core/sarek", peakMemoryGB: 40 }));
+    m = addRun(m, run({ pipeline: "nf-core/rnaseq", peakMemoryGB: 31 })); // newest rnaseq
+    expect(lastPeakMemoryFor(m, "nf-core/rnaseq")).toBe(31);
+    expect(lastPeakMemoryFor(m, "nf-core/atacseq")).toBeNull();
+  });
+  it("skips runs without a recorded peak", () => {
+    const m = addRun(emptyMemory(), run({ pipeline: "nf-core/rnaseq" }));
+    expect(lastPeakMemoryFor(m, "nf-core/rnaseq")).toBeNull();
   });
 });
 
