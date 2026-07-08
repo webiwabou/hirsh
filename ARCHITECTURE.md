@@ -41,7 +41,7 @@ src/
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits
 │   ├── (pipelines/nfcoreSchema.ts)   synthesize a param interview + samplesheet columns from a catalog pipeline's own schemas (run it on real data)
-│   ├── (pipelines/synthDefinition.ts) auto-curate a catalog pipeline into a persistent registry definition (learns pipelines into ~/.bioagent/pipelines)
+│   ├── (pipelines/synthDefinition.ts) auto-curate a catalog pipeline into a persistent registry definition (learns params, samplesheet + real result outputs into ~/.bioagent/pipelines)
 │   ├── parameterFilling.ts   Phase C (params + samplesheet + params.yaml + command)
 │   └── stateMachine.ts       orchestrates A→E (incl. the resource pre-flight)
 ├── execution/
@@ -243,8 +243,11 @@ into already exist:
   pipelines and schema-validated definitions will land. It loads the bundled
   curated definitions **and** user-curated ones from `~/.bioagent/pipelines`
   (`userDefinitionsDir`), where `synthDefinition.ts` writes definitions
-  auto-generated from a catalog pipeline's schema after a run — so the guided set
-  grows itself (bundled hand-curated wins on a name clash).
+  auto-generated from a catalog pipeline's schema after a run — params + samplesheet
+  from the schema, and `results.outputs` **learned from the completed run's output
+  directory** (`detectResultOutputs`: MultiQC report + VCF dirs) so the curated
+  pipeline interprets real files next time — so the guided set grows itself
+  (bundled hand-curated wins on a name clash).
 - **`resources.ts`** is the foundation for per-process modeling and the
   infrastructure negotiation (HPC/cloud) of Phase 3.
 - **`runner.ts`** already isolates process execution, the natural place for an

@@ -136,10 +136,18 @@ parameterize → confirm → run → interpret.
   `registry.ts::userDefinitionsDir`/`invalidateRegistryCache`; `offerCuration`
   wired; verified end-to-end that atacseq curated from its live schema loads as a
   guided pipeline).
-  - ⬜ Remaining: refine a curated definition's `results.outputs` automatically
-    (learn real output paths from a completed run's directory) and add a
-    resources block from the pipeline's config; let the scientist edit a curated
-    definition through Hirsh.
+  - ✅ **Learns real result outputs.** When curating after a run, Hirsh scans the
+    completed output directory and fills `results.outputs` with the concrete files
+    worth interpreting — the MultiQC report (shallowest match) and VCF directories,
+    by nf-core convention, plus a catch-all — so next session's interpretation is
+    rich (per-sample QC stats, variant counts) instead of a generic directory
+    listing (`synthDefinition.ts::detectResultOutputs` +
+    `interpreter.ts::listRelativeFiles`, pure/unit-tested; integration verified).
+  - ⬜ Remaining: add a `resources` block automatically (deferred — a test run's
+    memory peaks are tiny/misleading and parsing the pipeline's Groovy config is
+    fragile; better sourced from a real run's Nextflow trace over representative
+    data); learn per-tool table outputs (counts/DE tables) beyond MultiQC/VCF; and
+    let the scientist edit a curated definition through Hirsh.
 - ✅ Samplesheet construction with FASTQ pair inference
 - ✅ Live Nextflow streaming, explicit run confirmation
 - ✅ Plain-language results summary + MultiQC pointer

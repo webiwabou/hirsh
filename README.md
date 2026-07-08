@@ -481,12 +481,14 @@ the one a bioinformatician would reach for (e.g. `atacseq`, `methylseq`,
 **Hirsh learns pipelines.** After a run, it offers to **curate** the catalog
 pipeline into a persistent definition — generated from its schema and written to
 `~/.bioagent/pipelines` — so next session it's a first-class, guided pipeline (with
-step-by-step parameters), not schema-driven each time. The generated file is
-honest boilerplate: it carries an "auto-generated, NOT hand-curated" header naming
-what to refine (the result output paths, a resources block, the citation DOI), and
-deleting it reverts to the on-the-fly flow. A bundled, hand-curated definition
-always wins over a learned one of the same name. This way the curated set grows
-itself as you use pipelines.
+step-by-step parameters), not schema-driven each time. It even **learns the real
+result outputs** from the completed run (the MultiQC report, variant-call
+directories) so next session's interpretation is rich, not a generic listing. The
+generated file is honest boilerplate: it carries an "auto-generated, NOT
+hand-curated" header naming what to refine (remaining output paths, a resources
+block, the citation DOI), and deleting it reverts to the on-the-fly flow. A
+bundled, hand-curated definition always wins over a learned one of the same name.
+This way the curated set grows itself as you use pipelines.
 
 ## Composing a pipeline from nf-core modules
 
