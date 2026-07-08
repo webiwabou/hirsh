@@ -316,8 +316,11 @@ negotiation and container/data staging are in; full toolchain bootstrapping
     execution trace's `peak_rss` (base-1024) and reports the run's overall peak and
     heaviest process, so the scientist sizes future runs from real usage
     (`results/parsers.ts::parseTraceResources`, pure/unit-tested; surfaced in Phase E).
-  - ⬜ Remaining: feed the observed peaks back into the pre-flight model (via
-    project memory) so the *next* run's estimate uses real usage, not curated numbers.
+  - ✅ **Feeds observed peaks back via memory.** A successful run records its real
+    peak memory in project memory, and the next run's pre-flight surfaces that past
+    real peak next to the curated estimate, so sizing is grounded in what actually
+    happened (`memory/store.ts::lastPeakMemoryFor`, unit-tested; wired into
+    `phaseResourceCheck`).
 - ✅ **Executor abstraction.** Before a run Hirsh asks *where* to run — local
   machine, an HPC scheduler (Slurm/SGE/LSF/PBS) or AWS Batch — and writes a small
   Nextflow `-c` config that sets `process.executor` (+ queue, and region/S3 work
