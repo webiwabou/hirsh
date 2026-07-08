@@ -42,7 +42,7 @@ src/
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
 │   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
 │   ├── samplesheetReview.ts  data-grounded design check on the built samplesheet (per-group replicates, balance, missing control, batch confounding, lane/technical-replicate merging) (Phase 6)
-│   ├── contrasts.ts     proposes DE contrasts from the condition samplesheet (differentialabundance follow-up) (Phase 6)
+│   ├── contrasts.ts     proposes DE contrasts from the condition samplesheet — main effects (CSV) and, for a crossed multi-factor design, interaction contrasts (YAML formula form) (differentialabundance follow-up) (Phase 6)
 │   ├── inference.ts      derives parameters from context (organism → iGenomes genome key) for autonomy (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)
 │   ├── (pipelines/nfcoreCatalog.ts)  live nf-core catalog: recommend an established pipeline when none curated fits

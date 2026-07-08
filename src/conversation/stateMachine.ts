@@ -127,7 +127,7 @@ import {
   type DesignObservation,
 } from "./designReview.js";
 import { reviewSamplesheetContent } from "./samplesheetReview.js";
-import { contrastsCsv, proposeContrastsFromSheet } from "./contrasts.js";
+import { contrastsCsv, contrastsYaml, proposeContrastsFromSheet, proposeInteractionContrasts } from "./contrasts.js";
 import { classifyPathAnswer, wantsTestProfile } from "./pathInput.js";
 import { chooseWith } from "./choice.js";
 import { selectPipeline } from "./pipelineSelection.js";
@@ -2835,8 +2835,55 @@ export class Agent {
           "provide your own contrasts if that's not the intended comparison.",
       );
     }
+    // Multi-factor (factorial) design: offer the interaction contrast too — the
+    // "does the treatment effect differ by genotype?" question the main effects
+    // can't answer. Needs the YAML contrasts form (a model formula), so including
+    // it switches the written file to contrasts.yml.
+    const interaction = proposeInteractionContrasts(text);
+    let includeInteraction = false;
+    if (interaction) {
+      const { factorA, factorB } = interaction;
+      this.io.say(
+        `Your design crosses two factors ("${factorA.column}" × "${factorB.column}"), so I can also test their interaction —` +
+          ` whether the effect of one depends on the other:`,
+      );
+      for (const c of interaction.contrasts) this.io.info(`  • interaction: ${c.makeContrastsStr}  (${c.formula})`);
+      if (interaction.replication === "partial") {
+        this.io.warn(
+          "Some factor-level combinations have only one replicate, so the interaction is estimable but low-powered.",
+        );
+      }
+      if (interaction.assumedReference) {
+        this.io.warn(
+          `No control level was recognizable for one factor, so I assumed a reference ` +
+            `("${factorA.reference}"/"${factorB.reference}"). Provide your own contrasts if that's wrong.`,
+        );
+      }
+      includeInteraction = await this.io.confirm(
+        "Include the interaction contrast (writes a YAML contrasts file)?",
+        true,
+        { auto: true },
+      );
+    }
+
     const ok = await this.io.confirm("Use these contrasts?", true, { auto: true });
     if (!ok) return null;
+
+    if (includeInteraction && interaction) {
+      const path = join(runDir, "contrasts.yml");
+      try {
+        writeFileSync(path, contrastsYaml(proposed.contrasts, interaction.contrasts), "utf8");
+      } catch (err) {
+        this.io.warn("Couldn't write contrasts.yml: " + (err instanceof Error ? err.message : String(err)));
+        return null;
+      }
+      const total = proposed.contrasts.length + interaction.contrasts.length;
+      this.io.info(
+        `Wrote ${total} contrast(s) — ${proposed.contrasts.length} main effect(s) + ` +
+          `${interaction.contrasts.length} interaction — to ${path}`,
+      );
+      return path;
+    }
 
     const path = join(runDir, "contrasts.csv");
     try {

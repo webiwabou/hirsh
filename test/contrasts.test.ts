@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import {
   contrastsCsv,
+  contrastsYaml,
+  detectFactors,
   proposeContrasts,
   proposeContrastsFromSheet,
+  proposeInteractionContrasts,
 } from "../src/conversation/contrasts.js";
 import { detectControlGroup } from "../src/conversation/samplesheetReview.js";
 
@@ -90,5 +94,115 @@ describe("proposeContrastsFromSheet", () => {
     ].join("\n");
     const r2 = proposeContrastsFromSheet(confounded)!;
     expect(r2.blocking).toBeNull(); // confounded batch is unusable as a covariate
+  });
+});
+
+const FACTORIAL = [
+  "sample,genotype,treatment",
+  "s1,WT,Control", "s2,WT,Control",
+  "s3,WT,Treated", "s4,WT,Treated",
+  "s5,KO,Control", "s6,KO,Control",
+  "s7,KO,Treated", "s8,KO,Treated",
+].join("\n");
+
+describe("detectFactors", () => {
+  it("finds the experimental factors with levels ordered control-first", () => {
+    const factors = detectFactors(FACTORIAL);
+    expect(factors.map((f) => f.column)).toEqual(["genotype", "treatment"]);
+    const genotype = factors.find((f) => f.column === "genotype")!;
+    expect(genotype.reference).toBe("WT"); // WT recognized as the control level
+    expect(genotype.levels[0]).toBe("WT");
+    const treatment = factors.find((f) => f.column === "treatment")!;
+    expect(treatment.reference).toBe("Control");
+  });
+
+  it("excludes batch columns and single-level columns", () => {
+    const csv = ["sample,condition,batch", "s1,treated,b1", "s2,treated,b2"].join("\n");
+    // condition has a single level, batch is technical → no usable factors.
+    expect(detectFactors(csv)).toEqual([]);
+  });
+
+  it("counts levels by biological sample, merging technical replicates", () => {
+    // sample s1 spans two lanes but is one biological sample → treatment still 2 levels.
+    const csv = [
+      "sample,treatment", "s1,Control", "s1,Control", "s2,Treated", "s3,Treated",
+    ].join("\n");
+    const [treatment] = detectFactors(csv);
+    expect(treatment.levels.sort()).toEqual(["Control", "Treated"]);
+  });
+});
+
+describe("proposeInteractionContrasts", () => {
+  it("proposes the interaction contrast for a crossed 2x2 design", () => {
+    const p = proposeInteractionContrasts(FACTORIAL)!;
+    expect(p.factorA.column).toBe("genotype");
+    expect(p.factorB.column).toBe("treatment");
+    expect(p.replication).toBe("full");
+    expect(p.contrasts).toEqual([
+      {
+        id: "genotype_WT_KO_treatment_Control_Treated",
+        formula: "~ genotype * treatment",
+        makeContrastsStr: "genotypeKO.treatmentTreated",
+      },
+    ]);
+  });
+
+  it("returns null when the two factors are not fully crossed", () => {
+    // KO only ever appears with Treated → the WT/KO × Control/Treated cells are incomplete.
+    const csv = [
+      "sample,genotype,treatment",
+      "s1,WT,Control", "s2,WT,Control", "s3,WT,Treated", "s4,WT,Treated",
+      "s5,KO,Treated", "s6,KO,Treated",
+    ].join("\n");
+    expect(proposeInteractionContrasts(csv)).toBeNull();
+  });
+
+  it("returns null with fewer than two experimental factors", () => {
+    const csv = ["sample,condition", "s1,treated", "s2,control"].join("\n");
+    expect(proposeInteractionContrasts(csv)).toBeNull();
+  });
+
+  it("flags partial replication when a cell has a single replicate", () => {
+    const csv = [
+      "sample,genotype,treatment",
+      "s1,WT,Control", "s2,WT,Control",
+      "s3,WT,Treated", "s4,WT,Treated",
+      "s5,KO,Control", "s6,KO,Control",
+      "s7,KO,Treated", // only one KO/Treated replicate
+    ].join("\n");
+    const p = proposeInteractionContrasts(csv)!;
+    expect(p.replication).toBe("partial");
+  });
+
+  it("emits one interaction contrast per non-reference level pair (2x3)", () => {
+    const csv = [
+      "sample,genotype,dose",
+      "a1,WT,none", "a2,WT,none", "a3,WT,low", "a4,WT,low", "a5,WT,high", "a6,WT,high",
+      "b1,KO,none", "b2,KO,none", "b3,KO,low", "b4,KO,low", "b5,KO,high", "b6,KO,high",
+    ].join("\n");
+    const p = proposeInteractionContrasts(csv)!;
+    // genotype: ref WT, target KO; dose: ref none? "none" isn't a control label → alphabetical ref "high"
+    expect(p.contrasts.length).toBe(2);
+    expect(p.contrasts.every((c) => c.formula === "~ genotype * dose")).toBe(true);
+  });
+});
+
+describe("contrastsYaml", () => {
+  it("mixes main-effect comparisons and formula-based interaction contrasts", () => {
+    const main = proposeContrasts("treatment", ["Treated", "Control"]);
+    const p = proposeInteractionContrasts(FACTORIAL)!;
+    const yaml = contrastsYaml(main, p.contrasts);
+    const parsed = parseYaml(yaml) as { contrasts: any[] };
+    expect(parsed.contrasts).toHaveLength(2);
+    expect(parsed.contrasts[0].comparison).toEqual(["treatment", "Control", "Treated"]);
+    expect(parsed.contrasts[1].formula).toBe("~ genotype * treatment");
+    expect(parsed.contrasts[1].make_contrasts_str).toBe("genotypeKO.treatmentTreated");
+  });
+
+  it("carries a blocking factor as blocking_factors on a main-effect entry", () => {
+    const main = proposeContrasts("condition", ["treated", "control"], "control", "batch");
+    const yaml = contrastsYaml(main, []);
+    const parsed = parseYaml(yaml) as { contrasts: any[] };
+    expect(parsed.contrasts[0].blocking_factors).toEqual(["batch"]);
   });
 });

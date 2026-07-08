@@ -651,7 +651,19 @@ The full realization: a scientific collaborator, not a command builder.
     gains a blocking column) so differentialabundance models the batch out; a
     *confounded* batch is not added (it isn't a usable covariate)
     (`contrasts.ts::proposeContrasts`/`proposeContrastsFromSheet`, unit-tested).
-  - ⬜ Remaining: propose interaction contrasts for a full multi-factor design.
+  - ✅ **Interaction contrasts for a multi-factor design.** When the samplesheet
+    crosses two experimental factors (e.g. genotype × treatment) as a full
+    factorial, Hirsh detects it and offers the **interaction contrast** — "does the
+    treatment effect differ by genotype?" — that the main effects can't answer. It
+    picks each factor's reference (detected control, else assumed & flagged), checks
+    the design is fully crossed (every level combination present) and whether every
+    cell is replicated (warns when interaction power is limited), and writes
+    differentialabundance's **YAML** contrasts form (`formula: "~ genotype *
+    treatment"` + `make_contrasts_str`) mixing main-effect comparisons and the
+    interaction in one file — the CSV form can't express a model formula. Always
+    reviewed; the plain single-factor case still writes the CSV
+    (`contrasts.ts::detectFactors`/`proposeInteractionContrasts`/`contrastsYaml`,
+    pure/unit-tested; YAML verified against the pipeline's documented schema).
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool
