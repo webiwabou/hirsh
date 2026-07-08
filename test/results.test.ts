@@ -5,6 +5,7 @@ import {
   extractVolcano,
   metricSeries,
   parseGeneralStats,
+  parseTraceResources,
   prettyMetric,
   summarizeTable,
   summarizeVcf,
@@ -207,5 +208,29 @@ describe("summarizeVcf", () => {
 
   it("ignores headers and malformed lines", () => {
     expect(summarizeVcf("##only headers\n#CHROM\tPOS").records).toBe(0);
+  });
+});
+
+describe("parseTraceResources", () => {
+  const trace = [
+    "task_id\tname\tstatus\texit\tpeak_rss",
+    "1\tSTAR_ALIGN (sample1)\tCOMPLETED\t0\t28.5 GB",
+    "2\tSTAR_ALIGN (sample2)\tCOMPLETED\t0\t31.2 GB",
+    "3\tFASTQC (sample1)\tCOMPLETED\t0\t512 MB",
+    "4\tSALMON\tCOMPLETED\t0\t2 GB",
+  ].join("\n");
+
+  it("reads peak RSS per process (max across tags) and the overall max", () => {
+    const r = parseTraceResources(trace);
+    expect(r.maxPeakRssGB).toBeCloseTo(31.2, 5);
+    expect(r.processes[0].name).toBe("STAR_ALIGN");
+    expect(r.processes[0].peakRssGB).toBeCloseTo(31.2, 5); // max of the two STAR tasks
+    const fastqc = r.processes.find((p) => p.name === "FASTQC")!;
+    expect(fastqc.peakRssGB).toBeCloseTo(0.5, 5); // 512 MB
+  });
+
+  it("returns nulls when the trace lacks the columns", () => {
+    expect(parseTraceResources("task_id\tname\tstatus\n1\tX\tOK").maxPeakRssGB).toBeNull();
+    expect(parseTraceResources("").maxPeakRssGB).toBeNull();
   });
 });

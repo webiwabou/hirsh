@@ -5,7 +5,7 @@
  * LLMProvider for reasoning. State lives in `session`, whose `phase` is updated
  * at each step (queried by /status).
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
@@ -94,6 +94,7 @@ import {
   type ResultsReport,
 } from "../results/interpreter.js";
 import { renderBarChart } from "../results/charts.js";
+import { parseTraceResources } from "../results/parsers.js";
 import { renderResultsReportHtml, type ReportArtifact } from "../results/report.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
@@ -1549,6 +1550,29 @@ export class Agent {
     }
   }
 
+  /**
+   * Surfaces the real peak memory a completed run used, read from the Nextflow
+   * execution trace — so the scientist knows how to size future runs. Best-effort.
+   */
+  private reportPeakMemory(outdir: string): void {
+    const dir = join(outdir, "pipeline_info");
+    try {
+      const files = readdirSync(dir)
+        .filter((f) => /execution_trace.*\.txt$/i.test(f))
+        .sort();
+      if (files.length === 0) return;
+      const res = parseTraceResources(readFileSync(join(dir, files[files.length - 1]), "utf8"));
+      if (res.maxPeakRssGB && res.processes.length > 0) {
+        this.io.info(
+          `Peak memory observed: ${res.maxPeakRssGB.toFixed(1)} GB (${res.processes[0].name}) — ` +
+            "useful for sizing future runs.",
+        );
+      }
+    } catch {
+      /* trace missing/unreadable — best-effort */
+    }
+  }
+
   /** Renders any small inline bar charts of the run's key numbers to the terminal. */
   private showCharts(report: ResultsReport): void {
     for (const chart of report.charts ?? []) {
@@ -2672,6 +2696,8 @@ export class Agent {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
     }
+
+    this.reportPeakMemory(outdir);
 
     this.writeResultsReport(
       pipeline.name,

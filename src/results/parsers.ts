@@ -362,6 +362,56 @@ export function parseTraceContainers(traceText: string): string[] {
   return [...seen].sort();
 }
 
+export interface TraceResources {
+  /** Processes with a parseable peak RSS, largest first. */
+  processes: Array<{ name: string; peakRssGB: number }>;
+  /** The largest peak RSS observed across processes (GB), or null if none. */
+  maxPeakRssGB: number | null;
+}
+
+/**
+ * Parses a Nextflow trace size cell ("1.5 GB", "512 MB", "2 GB") to GB. Nextflow
+ * reports base-1024 units, so 512 MB → 0.5 GB.
+ */
+function sizeToGB(raw: string): number | null {
+  const m = /^([\d.]+)\s*([kmgt]?)i?b?$/i.exec(raw.trim());
+  if (!m) return null;
+  const value = Number(m[1]);
+  if (Number.isNaN(value)) return null;
+  const unit = m[2].toLowerCase();
+  const K = 1024;
+  const factor: Record<string, number> = { "": 1 / K ** 3, k: 1 / K ** 2, m: 1 / K, g: 1, t: K };
+  return value * (factor[unit] ?? 1);
+}
+
+/**
+ * Reads the real peak memory per process from an nf-core execution trace (the
+ * `peak_rss` column), so a scientist learns how much memory a run actually used —
+ * useful for sizing future runs. Aggregates to the max peak across processes
+ * (each process name kept at its largest peak). Pure; tolerant of missing columns.
+ */
+export function parseTraceResources(traceText: string): TraceResources {
+  const lines = traceText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return { processes: [], maxPeakRssGB: null };
+  const header = lines[0].split("\t").map((h) => h.trim());
+  const nameIdx = header.indexOf("name");
+  const rssIdx = header.indexOf("peak_rss");
+  if (nameIdx === -1 || rssIdx === -1) return { processes: [], maxPeakRssGB: null };
+
+  const byName = new Map<string, number>();
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split("\t");
+    const name = (cells[nameIdx] ?? "").trim().replace(/\s*\(.*\)$/, ""); // drop the tag suffix
+    const gb = sizeToGB(cells[rssIdx] ?? "");
+    if (!name || gb === null) continue;
+    byName.set(name, Math.max(byName.get(name) ?? 0, gb));
+  }
+  const processes = [...byName.entries()]
+    .map(([name, peakRssGB]) => ({ name, peakRssGB }))
+    .sort((a, b) => b.peakRssGB - a.peakRssGB);
+  return { processes, maxPeakRssGB: processes.length > 0 ? processes[0].peakRssGB : null };
+}
+
 /** Counts variant records in VCF text (lines that are not headers/empty). */
 export function countVcfRecords(text: string): number {
   let n = 0;
