@@ -41,6 +41,8 @@ export interface ResultsReportInput {
   htmlReports: string[];
   /** Other files to link (methods, provenance, params). */
   artifacts: ReportArtifact[];
+  /** Actual tool → version used (from nf-core software_versions), for methods. */
+  tools?: Record<string, string>;
   /** ISO-ish date string, e.g. "2026-07-07". */
   generatedOn: string;
 }
@@ -190,6 +192,16 @@ function factsSection(outputs: ReportOutputFact[]): string {
   return `<table class="facts"><thead><tr><th>Output</th><th>What was found</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function toolsSection(tools: Record<string, string> | undefined): string {
+  const entries = Object.entries(tools ?? {});
+  if (entries.length === 0) return "";
+  const chips = entries
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([tool, v]) => `<span class="chip"><b>${esc(tool)}</b> ${esc(v)}</span>`)
+    .join(" ");
+  return `<section><h2>Tools &amp; versions</h2><div class="chips">${chips}</div><p class="muted">Exact versions nf-core recorded for this run — cite these in your methods (see METHODS.md for the full statement and DOIs).</p></section>`;
+}
+
 function linksSection(input: ResultsReportInput): string {
   const items: string[] = [];
   for (const h of input.htmlReports) items.push(`<li><a href="${esc(h)}">${esc(h)}</a> <span class="muted">(open in browser)</span></li>`);
@@ -245,6 +257,9 @@ code{background:#eef2f7;padding:1px 5px;border-radius:4px;font-size:13px}
 figure{margin:16px 0}
 figcaption{font-size:13px;color:#475569;margin-bottom:4px}
 ul.links{padding-left:18px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-block;background:#eef2f7;border-radius:12px;padding:2px 10px;font-size:13px}
+.chip b{font-weight:600}
 a{color:#2563eb}
 footer{margin-top:40px;color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;padding-top:12px}
 `.trim();
@@ -269,6 +284,8 @@ ${meta ? `<section><h2>Study</h2><dl>${meta}</dl></section>` : ""}
 ${chartsHtml ? `<section><h2>Figures</h2>${chartsHtml}</section>` : ""}
 
 <section><h2>Outputs</h2>${factsSection(input.outputs)}</section>
+
+${toolsSection(input.tools)}
 
 ${linksSection(input)}
 

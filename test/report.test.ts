@@ -107,6 +107,18 @@ describe("renderResultsReportHtml", () => {
     expect((withVolcano.match(/<circle /g) ?? []).length).toBe(3);
   });
 
+  it("renders a Tools & versions section when tool versions are provided", () => {
+    const withTools = renderResultsReportHtml({ ...BASE, tools: { STAR: "2.7.9a", salmon: "1.10.1" } });
+    expect(withTools).toContain("Tools &amp; versions");
+    expect(withTools).toContain("STAR");
+    expect(withTools).toContain("2.7.9a");
+    expect(withTools).toContain("salmon");
+  });
+
+  it("omits the Tools section when there are no versions", () => {
+    expect(renderResultsReportHtml(BASE)).not.toContain("Tools &amp; versions");
+  });
+
   it("escapes HTML in the interpretation prose", () => {
     const html2 = renderResultsReportHtml({ ...BASE, summaryText: "1 < 2 & <b>bold</b>" });
     expect(html2).toContain("1 &lt; 2 &amp; &lt;b&gt;bold&lt;/b&gt;");

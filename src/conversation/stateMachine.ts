@@ -1538,6 +1538,7 @@ export class Agent {
         summaryText,
         htmlReports: report.htmlReports,
         artifacts,
+        tools: readSoftwareVersions(report.outdir, name),
         generatedOn: new Date().toISOString().slice(0, 10),
       });
       const file = join(runDir, "REPORT.html");
