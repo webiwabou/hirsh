@@ -205,8 +205,8 @@ Make every supported pipeline safe to run for real and make its output land as
   from count matrices, significant genes per contrast — so the scientist sees the
   shape of the data at a glance (`results/charts.ts::renderBarChart`, unit-tested;
   shown for primary, follow-up and composed runs).
-  - ⬜ Remaining: per-tool detail (RSeQC/Picard sections, variant-type breakdowns)
-    and MultiQC per-sample metric charts (values are formatted strings today).
+  - ⬜ Remaining: per-tool detail (RSeQC/Picard sections, variant-type breakdowns).
+    (MultiQC per-sample metric charts now render in the HTML report — see Phase 6.)
 - ✅ **Correct multi-sample designs.** sarek now asks per-sample patient +
   tumor/normal (grouped by patient) and warns when a patient lacks a matched
   normal; rnaseq supports per-sample strandedness (shared default + overrides);
@@ -582,9 +582,13 @@ The full realization: a scientific collaborator, not a command builder.
       as a dependency-free inline SVG. The parser keeps all significant points and
       down-samples the rest so the figure stays small (`parsers.ts::extractVolcano`
       + `report.ts::volcanoToSvg`, pure/unit-tested; verified on a 2,000-gene table).
-  - ⬜ Remaining: MultiQC per-sample metric charts (values are formatted strings
-    today); per-tool citations inline (today they point to CITATIONS.md); and an
-    optional PDF export.
+    - ✅ **MultiQC per-sample metric charts.** The report also draws a per-sample bar
+      chart for each numeric MultiQC general-stats metric (%GC, %dups, read counts,
+      %aligned…) — so QC differences across samples are visible at a glance. Skips
+      non-numeric/constant metrics and caps the count; report-only so the terminal
+      stays lean (`parsers.ts::metricSeries`/`prettyMetric`, pure/unit-tested).
+  - ⬜ Remaining: per-tool citations inline in the report (today they point to
+    CITATIONS.md); and an optional PDF export.
 - 🔵 **End-to-end autonomy with guardrails.** With `autonomy.enabled` (or `--auto`),
   Hirsh runs a request to an interpreted answer without pausing for reversible
   confirmations — it auto-answers those with their intended value and announces each
