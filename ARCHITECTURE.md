@@ -40,7 +40,7 @@ src/
 │   ├── answers.ts    lenient natural-language yes/no interpretation for confirmations
 │   ├── intentExtraction.ts   Phase A (forced tool record_intent)
 │   ├── designReview.ts   experimental-design review (replication/controls/batch effects) (Phase 6)
-│   ├── samplesheetReview.ts  data-grounded design check on the built samplesheet (per-group replicate counts, balance, missing control) (Phase 6)
+│   ├── samplesheetReview.ts  data-grounded design check on the built samplesheet (per-group replicates, balance, missing control, batch confounding) (Phase 6)
 │   ├── contrasts.ts     proposes DE contrasts from the condition samplesheet (differentialabundance follow-up) (Phase 6)
 │   ├── inference.ts      derives parameters from context (organism → iGenomes genome key) for autonomy (Phase 6)
 │   ├── pipelineSelection.ts  Phase B (forced tool select_pipeline)

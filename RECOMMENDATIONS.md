@@ -616,9 +616,13 @@ The full realization: a scientific collaborator, not a command builder.
     instead of demanding a hand-written one (always confirmed; they can supply
     their own) (`conversation/contrasts.ts` + `samplesheetReview.ts::detectControlGroup`,
     pure/unit-tested; `collectFollowUpInputs` wired).
-  - ⬜ Remaining: suggest an extra QC/analysis step from the data (e.g. flag a
-    likely batch covariate to include in the model), and propose contrasts for a
-    multi-factor design (interactions).
+  - ✅ **Batch confounding / covariate.** The review inspects a technical batch
+    variable (batch/lane/run/date/prep…) against the condition: it flags a
+    **confounded** design (risk — every batch holds one condition, so batch can't
+    be separated from biology) or, when batch crosses conditions, recommends
+    modelling it as a **covariate** (`~ batch + condition`)
+    (`samplesheetReview.ts::classifyBatchDesign`, pure/unit-tested).
+  - ⬜ Remaining: propose contrasts for a multi-factor design (interactions).
 - 🔵 **Publication-ready output.** After interpreting results, Hirsh generates a
   paste-ready **methods paragraph** and references (`METHODS.md`) from the run's
   pinned pipeline + Nextflow versions, the container engine, and the *real* tool
