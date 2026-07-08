@@ -19,6 +19,7 @@ src/
 │   ├── index.ts      startup: workspace chdir → config → registry → provider → env → conversation loop
 │   ├── workspace.ts  resolves the project workspace (hirsh [path] / --workdir / HIRSH_WORKSPACE / cwd) (Phase 6)
 │   ├── init.ts       `hirsh init [path]` scaffolds a workspace (config.yaml, .gitignore, .hirsh/) (Phase 6)
+│   ├── runsList.ts   `hirsh runs` lists the workspace's runs from each run_manifest.json (Phase 6)
 │   ├── banner.ts     minimal one-line logo, rounded welcome frame and tips
 │   ├── terminalIO.ts AgentIO implementation over readline + chalk
 │   └── autonomousIO.ts  IO decorator for autonomous mode (auto-answers reversible confirms) (Phase 6)

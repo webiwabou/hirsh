@@ -120,7 +120,12 @@ an existing file and only tops up a missing `.gitignore` entry.
 hirsh init my-study    # scaffold ./my-study
 cd my-study
 hirsh                  # start working in it
+hirsh runs             # list this workspace's runs (date, pipeline, status, dir)
 ```
+
+A definition can also be pinned to one project by dropping it in
+`<workspace>/.hirsh/pipelines/` — the registry loads those alongside the
+machine-global learned pipelines (a bundled, hand-curated definition still wins).
 
 ## Configuration
 

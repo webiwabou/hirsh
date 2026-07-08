@@ -536,9 +536,13 @@ The full realization: a scientific collaborator, not a command builder.
     `.hirsh/` data dir. Safe and idempotent: never overwrites an existing file,
     only tops up missing `.gitignore` entries (`cli/init.ts`:
     `starterConfigYaml`/`mergeGitignore`/`runInit`, unit-tested).
-  - ⬜ Remaining: optionally per-project curated pipelines
-    (`<workspace>/.hirsh/pipelines`) in addition to the global ones; and a `runs/`
-    index/listing command.
+  - ✅ **Per-project curated pipelines.** The registry also loads
+    `<workspace>/.hirsh/pipelines` alongside the machine-global ones, so a
+    definition can be pinned to a single project (precedence: bundled >
+    project-local > global) (`registry.ts::projectDefinitionsDir`; verified).
+  - ✅ **`hirsh runs`** lists the workspace's runs — date, pipeline, status,
+    directory (newest first) — from each run's `run_manifest.json`
+    (`cli/runsList.ts`, pure summary/format unit-tested; verified end-to-end).
 - ✅ **Automatic public-data retrieval.** A scientist rarely has FASTQ files on
   hand — they have *accession numbers* from a paper. Hirsh now recognizes public
   accessions in the request (SRA/ENA/DDBJ runs, experiments, studies; GEO series/
