@@ -116,9 +116,20 @@ parameterize → confirm → run → interpret.
   `synthesizeSchemaParams`/`parseInputSchema`/`isSimpleFastqSheet` pure +
   unit-tested, verified live against atacseq/scrnaseq/methylseq/ampliseq/
   taxprofiler; `runEstablishedOnData` wired).
-  - ⬜ Remaining: honor `dependentRequired`/conditional-required params and
-    param-level `pattern` validation; and a resource pre-flight for a catalog run
-    (no curated per-process model exists for it).
+  - ✅ **Param-level `pattern` validation + conditional-required params.** The
+    synthesized interview now captures each parameter's JSON-Schema `pattern` and
+    validates the scientist's answer against it — catching e.g. a `--fasta` pointed
+    at a `.txt` before a doomed run — re-asking a couple of times, then accepting
+    with a warning so an over-strict pattern can't trap them. It also honors
+    conditional-required rules (`dependentRequired`, and the object form of
+    draft-07 `dependencies`): a value that makes another param required triggers a
+    follow-up ask. Verified live against rnaseq (7 reference params carry patterns;
+    `fasta` rejects `genome.txt`, accepts `genome.fa.gz`); honestly, **no current
+    nf-core schema uses the conditional keywords** — the support is forward-looking
+    (`nfcoreSchema.ts::validateParamValue`/`collectConditionalRequired`/
+    `conditionallyRequired`, pure + unit-tested).
+  - ⬜ Remaining: a resource pre-flight for a catalog run (no curated per-process
+    model exists for it).
 - ✅ **Auto-curate a catalog pipeline (Hirsh learns pipelines).** After running a
   catalog pipeline, Hirsh offers to **curate it into a persistent definition** so
   it becomes a first-class, guided pipeline next session — not schema-driven each

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectConditionalRequired,
   collectRequiredParams,
+  conditionallyRequired,
   isSimpleFastqSheet,
   parseInputSchema,
   synthesizeSchemaParams,
   toColumnSpecs,
+  validateParamValue,
   type InputColumn,
 } from "../src/pipelines/nfcoreSchema.js";
 
@@ -25,7 +28,12 @@ const SCHEMA = {
       required: ["aligner"],
       properties: {
         genome: { type: "string", description: "iGenomes key." },
-        fasta: { type: "string", format: "file-path", description: "Genome FASTA." },
+        fasta: {
+          type: "string",
+          format: "file-path",
+          pattern: "^\\S+\\.fn?a(sta)?(\\.gz)?$",
+          description: "Genome FASTA.",
+        },
         gtf: { type: "string", format: "file-path", description: "Annotation GTF." },
         aligner: {
           type: "string",
@@ -77,6 +85,69 @@ describe("synthesizeSchemaParams", () => {
   it("classifies kinds by format/enum", () => {
     expect(byName.fasta?.kind).toBe("file");
     expect(byName.genome?.kind).toBe("string");
+  });
+
+  it("captures a param-level pattern", () => {
+    expect(byName.fasta?.pattern).toBe("^\\S+\\.fn?a(sta)?(\\.gz)?$");
+    expect(byName.gtf?.pattern).toBeUndefined();
+  });
+});
+
+describe("validateParamValue", () => {
+  const fasta = { name: "fasta", kind: "file" as const, pattern: "^\\S+\\.fn?a(sta)?(\\.gz)?$" };
+
+  it("accepts a value matching the pattern", () => {
+    expect(validateParamValue(fasta, "/ref/genome.fasta").ok).toBe(true);
+    expect(validateParamValue(fasta, "/ref/genome.fa.gz").ok).toBe(true);
+  });
+
+  it("rejects a value that doesn't match, with a plain-language message", () => {
+    const r = validateParamValue(fasta, "/ref/genome.txt");
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/doesn't match the expected format for fasta/);
+  });
+
+  it("does not constrain params without a pattern or non-string kinds", () => {
+    expect(validateParamValue({ name: "x", kind: "file" }, "anything").ok).toBe(true);
+    expect(validateParamValue({ name: "n", kind: "number", pattern: "^\\d+$" }, "abc").ok).toBe(true);
+  });
+
+  it("treats an unparseable pattern as no constraint", () => {
+    expect(validateParamValue({ name: "x", kind: "string", pattern: "([" }, "whatever").ok).toBe(true);
+  });
+});
+
+describe("collectConditionalRequired / conditionallyRequired", () => {
+  const SCHEMA_DEP = {
+    definitions: {
+      grp: {
+        dependentRequired: { aligner: ["fasta"] },
+        properties: { aligner: { type: "string" }, fasta: { type: "string" } },
+      },
+      grp2: {
+        // draft-07 object form of `dependencies`
+        dependencies: { save_reference: ["outdir_index"] },
+      },
+    },
+  };
+
+  it("reads dependentRequired and the object form of dependencies", () => {
+    const cond = collectConditionalRequired(SCHEMA_DEP);
+    expect(cond.get("aligner")).toEqual(["fasta"]);
+    expect(cond.get("save_reference")).toEqual(["outdir_index"]);
+  });
+
+  it("returns nothing for schemas without conditional keywords", () => {
+    expect(collectConditionalRequired({ definitions: { g: { properties: {} } } }).size).toBe(0);
+  });
+
+  it("computes the extra params required by what's provided", () => {
+    const cond = collectConditionalRequired(SCHEMA_DEP);
+    expect([...conditionallyRequired(cond, ["aligner"])]).toEqual(["fasta"]);
+    // fasta already provided → no extra.
+    expect([...conditionallyRequired(cond, ["aligner", "fasta"])]).toEqual([]);
+    // trigger absent → no extra.
+    expect([...conditionallyRequired(cond, ["genome"])]).toEqual([]);
   });
 });
 

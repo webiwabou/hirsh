@@ -25,6 +25,8 @@ export interface SynthParam {
   description: string;
   /** Looks like a reference input (genome/annotation/index) worth asking about. */
   reference: boolean;
+  /** JSON-Schema `pattern` regex the value must match (e.g. a file extension). */
+  pattern?: string;
 }
 
 export interface InputColumn {
@@ -115,12 +117,87 @@ export function synthesizeSchemaParams(schema: unknown): SynthParam[] {
       default: scalarDefault(spec.default),
       description: typeof spec.description === "string" ? spec.description.trim() : "",
       reference: reference || genomeKey,
+      pattern: typeof spec.pattern === "string" ? spec.pattern : undefined,
     });
   }
   // Required first, then references, then the rest; stable by name within a tier.
   const tier = (p: SynthParam) => (p.required ? 0 : p.reference ? 1 : 2);
   out.sort((a, b) => tier(a) - tier(b) || a.name.localeCompare(b.name));
   return out;
+}
+
+/**
+ * Validates a scientist's answer for a parameter against its schema `pattern`
+ * (when it has one). Only string-ish kinds carry a meaningful pattern; a value
+ * that doesn't compile as a regex is treated as no constraint (so a weird schema
+ * can't block a run). Returns { ok } with a plain-language message on failure.
+ * Pure — no I/O — so the interview can validate before writing params.yaml.
+ */
+export function validateParamValue(
+  param: Pick<SynthParam, "name" | "kind" | "pattern">,
+  value: string,
+): { ok: boolean; message?: string } {
+  if (!param.pattern) return { ok: true };
+  if (param.kind === "number" || param.kind === "boolean" || param.kind === "enum") return { ok: true };
+  let re: RegExp;
+  try {
+    re = new RegExp(param.pattern);
+  } catch {
+    return { ok: true }; // unparseable pattern → don't block
+  }
+  if (re.test(value)) return { ok: true };
+  return {
+    ok: false,
+    message: `"${value}" doesn't match the expected format for ${param.name} (pattern: ${param.pattern}).`,
+  };
+}
+
+/**
+ * Reads JSON-Schema conditional-required declarations — `dependentRequired`
+ * (draft 2019-09+) and the object form of `dependencies` (draft-07) — anywhere in
+ * the schema, returning a map from a trigger parameter to the parameters that
+ * become required once it is set. Pure. (Current nf-core schemas don't use these
+ * keywords yet, but honoring them keeps Hirsh correct if a pipeline adds one.)
+ */
+export function collectConditionalRequired(schema: unknown): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (obj: unknown): void => {
+    if (!isRecord(obj)) return;
+    for (const key of ["dependentRequired", "dependencies"]) {
+      const dep = obj[key];
+      if (!isRecord(dep)) continue;
+      for (const [trigger, req] of Object.entries(dep)) {
+        if (!Array.isArray(req)) continue; // `dependencies` can also hold a schema — skip those
+        const names = req.filter((r): r is string => typeof r === "string");
+        if (names.length > 0) out.set(trigger, [...new Set([...(out.get(trigger) ?? []), ...names])]);
+      }
+    }
+    for (const k of ["definitions", "$defs"]) {
+      const section = obj[k];
+      if (isRecord(section)) Object.values(section).forEach(add);
+    }
+    if (Array.isArray(obj.allOf)) obj.allOf.forEach(add);
+  };
+  add(schema);
+  return out;
+}
+
+/**
+ * Given the set of parameter names the scientist has provided, returns the extra
+ * parameters that become required by conditional-required rules. Pure.
+ */
+export function conditionallyRequired(
+  conditional: Map<string, string[]>,
+  provided: Iterable<string>,
+): Set<string> {
+  const have = new Set(provided);
+  const extra = new Set<string>();
+  for (const name of have) {
+    for (const req of conditional.get(name) ?? []) {
+      if (!have.has(req)) extra.add(req);
+    }
+  }
+  return extra;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -159,6 +236,8 @@ export function toColumnSpecs(cols: InputColumn[]): ColumnSpec[] {
 export interface SynthesizedSpec {
   params: SynthParam[];
   columns: InputColumn[];
+  /** Conditional-required rules: trigger param → params required once it's set. */
+  conditional: Map<string, string[]>;
 }
 
 async function fetchRawJson(url: string): Promise<unknown | null> {
@@ -189,6 +268,7 @@ export async function fetchSynthesizedSpec(
   return {
     params: synthesizeSchemaParams(schema),
     columns: inputSchema === null ? [] : parseInputSchema(inputSchema),
+    conditional: collectConditionalRequired(schema),
   };
 }
 

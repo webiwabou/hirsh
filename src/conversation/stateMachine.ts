@@ -149,9 +149,11 @@ import {
   type NfCorePipeline,
 } from "../pipelines/nfcoreCatalog.js";
 import {
+  conditionallyRequired,
   fetchSynthesizedSpec,
   isSimpleFastqSheet,
   toColumnSpecs,
+  validateParamValue,
   type InputColumn,
   type SynthParam,
 } from "../pipelines/nfcoreSchema.js";
@@ -718,6 +720,29 @@ export class Agent {
       if (p.name === "genome") genomeGiven = true;
     }
 
+    // Conditional-required params: a value the scientist gave may make another
+    // param required (JSON-Schema dependentRequired). Ask for any such extras that
+    // weren't already provided. (No current nf-core schema uses this, but Hirsh
+    // honors it if one does.)
+    const byName = new Map(spec.params.map((p) => [p.name, p]));
+    for (const extra of conditionallyRequired(spec.conditional, Object.keys(params))) {
+      if (extra in params || extra === "input" || extra === "outdir") continue;
+      const p = byName.get(extra) ?? {
+        name: extra,
+        kind: "string" as const,
+        required: true,
+        description: "",
+        reference: false,
+      };
+      this.io.info(`${extra} is required because of a value you provided.`);
+      const value = await this.askSchemaParam({ ...p, required: true });
+      if (value === undefined || value === "") {
+        this.io.warn(`${extra} is conditionally required by ${pipeline}; not running. Inputs are in ${runDir}.`);
+        return true;
+      }
+      params[extra] = value;
+    }
+
     const paramsPath = join(runDir, "params.yaml");
     try {
       writeFileSync(paramsPath, stringifyYaml(params), "utf8");
@@ -775,13 +800,24 @@ export class Agent {
     const tag = param.required ? "" : param.reference ? " (reference — Enter to skip)" : " (optional — Enter to skip)";
     const prompt =
       `${param.name}${tag}` + (param.description ? `\n  ${param.description}` : "") + `\n  ${param.name}:`;
-    const v = await this.askComposedPath(prompt);
-    if (!v) return undefined;
-    if (param.kind === "number") {
-      const n = Number(v);
-      return Number.isNaN(n) ? v : n;
+    // Validate against the schema's `pattern` (e.g. a required file extension),
+    // re-asking a couple of times; a persistent mismatch is accepted with a
+    // warning rather than blocking, so an over-strict pattern can't trap the user.
+    for (let attempt = 0; ; attempt++) {
+      const v = await this.askComposedPath(prompt);
+      if (!v) return undefined;
+      const check = validateParamValue(param, v);
+      if (!check.ok && attempt < 2) {
+        this.io.warn(check.message ?? `That value doesn't match the expected format for ${param.name}.`);
+        continue;
+      }
+      if (!check.ok) this.io.warn((check.message ?? "") + " Using it anyway — double-check it before the run.");
+      if (param.kind === "number") {
+        const n = Number(v);
+        return Number.isNaN(n) ? v : n;
+      }
+      return v;
     }
-    return v;
   }
 
   /**
