@@ -582,8 +582,22 @@ The full realization: a scientific collaborator, not a command builder.
   Phase C builds the pipeline's proper one — for sarek, asking per-sample patient +
   tumor/normal — so "fetch public data → run sarek" works too
   (`fastqPairsFromSamplesheet` + `session.fetchedPairs`, unit-tested).
-  - ⬜ Remaining: resolve/preview sample metadata before downloading, and cache
-    fetched data across runs.
+  - ✅ **Metadata preview before downloading.** Before committing to a possibly
+    multi-gigabyte transfer, Hirsh resolves the accessions against the **ENA Portal
+    API** and previews what they contain — run count, organism, sequencing
+    strategy, layout, total reads and **rough download size** — then asks whether
+    to proceed. Best-effort and non-blocking: GEO/ArrayExpress ids (which ENA's
+    read_run endpoint doesn't resolve) are noted as resolved-by-fetchngs, and any
+    network failure just skips the preview (`execution/fetchngsMetadata.ts`:
+    `buildEnaFileReportUrl`/`parseEnaFileReport`/`summarizeRunMetadata`, pure +
+    unit-tested; verified live against a real study accession).
+  - ✅ **Cached downloads across runs.** A fetch is keyed by its accession set (+
+    the target pipeline's samplesheet tag) and written to a stable cache dir, so a
+    later session with the same accessions **reuses the previous download** instead
+    of re-fetching — Hirsh offers to reuse it (or re-fetch from scratch). Works for
+    both the tag-formatted and generic re-shaped samplesheet paths
+    (`execution/fetchngsCache.ts::fetchngsCacheKey`/`fetchngsCacheDir`, pure +
+    unit-tested; `.hirsh-cache/` is gitignored).
 - 🔵 **Project memory.** Hirsh remembers past analyses across sessions in a local,
   private JSON store (`~/.bioagent/memory.json`): each run's pipeline, intent
   (organism/data/objective), references used, outdir and status. When a new request

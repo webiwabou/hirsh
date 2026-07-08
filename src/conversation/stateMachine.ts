@@ -62,6 +62,15 @@ import {
   renderIdsFile,
   type Accession,
 } from "../execution/fetchngs.js";
+import { fetchngsCacheDir, fetchngsCacheKey } from "../execution/fetchngsCache.js";
+import {
+  buildEnaFileReportUrl,
+  formatBytes,
+  isEnaResolvable,
+  parseEnaFileReport,
+  summarizeRunMetadata,
+  type RunMetadata,
+} from "../execution/fetchngsMetadata.js";
 import {
   fastqPairsFromSamplesheet,
   inferPairs,
@@ -945,15 +954,36 @@ export class Agent {
       "I can download these with nf-core/fetchngs and build a samplesheet" +
         (tag ? ` formatted for ${pipeline.name}.` : "; it may need a small adjustment for this pipeline."),
     );
+
+    // Preview what the accessions actually resolve to (organism, strategy, rough
+    // size) before committing to a possibly large download — best-effort via ENA.
+    await this.previewFetchMetadata(accessions);
+
     const go = await this.io.confirm("Fetch the data automatically now?", true, { auto: true });
     if (!go) {
       this.io.info("Okay — I'll ask for local files during parameterization instead.");
       return;
     }
 
-    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const fetchDir = resolve(this.config.execution.workdir, `fetchngs-${ts}`);
+    // Cache: reuse a previous download of the same accessions (+ pipeline tag)
+    // instead of re-fetching. The cache dir doubles as the fetchngs outdir so a
+    // future run finds it here.
+    const cacheKey = fetchngsCacheKey(accessions, tag);
+    const fetchDir = fetchngsCacheDir(this.config.execution.workdir, cacheKey);
     const outdir = join(fetchDir, "results");
+    if (existsSync(fetchngsSamplesheetPath(outdir))) {
+      this.io.say("I already have these accessions downloaded from a previous run.");
+      const reuse = await this.io.confirm("Reuse the cached download (skip re-fetching)?", true, { auto: true });
+      if (reuse) {
+        if (tag) {
+          if (!this.applyFetchedSamplesheet(session, pipeline, outdir, accessions)) return;
+        } else {
+          this.reuseCachedGenericFetch(session, pipeline, outdir, accessions);
+        }
+        return;
+      }
+      this.io.info("Re-fetching from scratch.");
+    }
     try {
       mkdirSync(fetchDir, { recursive: true });
     } catch (err) {
@@ -1007,28 +1037,90 @@ export class Agent {
       if (!this.applyFetchedSamplesheet(session, pipeline, outdir, accessions)) return;
     } else {
       // fetchngs can't format for this pipeline (e.g. sarek's tumor/normal shape).
-      // Re-shape: pull the FASTQ pairs from the generic samplesheet and let Phase C
-      // build the proper one, asking the pipeline-specific columns.
-      const samplesheet = fetchngsSamplesheetPath(outdir);
-      let pairs: FastqPair[];
-      try {
-        pairs = fastqPairsFromSamplesheet(readFileSync(samplesheet, "utf8"));
-      } catch {
-        pairs = [];
-      }
-      if (pairs.length === 0) {
-        this.io.warn(
-          `Downloaded the data but couldn't read the FASTQ list from ${samplesheet}; ` +
-            "I'll ask for files during parameterization instead.",
-        );
-        return;
-      }
-      session.fetchedPairs = pairs;
-      this.io.say(
-        `Downloaded ${accessions.length} accession(s) → ${pairs.length} sample(s). I'll build the ` +
-          `${pipeline.name} samplesheet from them, asking any extra details it needs.`,
-      );
+      this.reuseCachedGenericFetch(session, pipeline, outdir, accessions);
     }
+  }
+
+  /**
+   * Handles the generic (no pipeline tag) fetch result — a fresh download or a
+   * cached one: pull the FASTQ pairs from the generic samplesheet and let Phase C
+   * build the pipeline-specific one, asking the columns it needs.
+   */
+  private reuseCachedGenericFetch(
+    session: Session,
+    pipeline: PipelineDefinition,
+    outdir: string,
+    accessions: Accession[],
+  ): void {
+    const samplesheet = fetchngsSamplesheetPath(outdir);
+    let pairs: FastqPair[];
+    try {
+      pairs = fastqPairsFromSamplesheet(readFileSync(samplesheet, "utf8"));
+    } catch {
+      pairs = [];
+    }
+    if (pairs.length === 0) {
+      this.io.warn(
+        `Got the data but couldn't read the FASTQ list from ${samplesheet}; ` +
+          "I'll ask for files during parameterization instead.",
+      );
+      return;
+    }
+    session.fetchedPairs = pairs;
+    this.io.say(
+      `${accessions.length} accession(s) → ${pairs.length} sample(s). I'll build the ` +
+        `${pipeline.name} samplesheet from them, asking any extra details it needs.`,
+    );
+  }
+
+  /**
+   * Best-effort metadata preview: resolves the accessions against the ENA Portal
+   * API and shows organism, sequencing strategy, run count and rough download
+   * size, so the scientist knows what they're about to fetch. Never blocks — any
+   * network/parse failure just skips the preview. GEO/ArrayExpress ids aren't
+   * resolvable here (fetchngs handles those separately), so they're noted.
+   */
+  private async previewFetchMetadata(accessions: Accession[]): Promise<void> {
+    const resolvable = accessions.filter((a) => isEnaResolvable(a.kind));
+    const unresolvable = accessions.filter((a) => !isEnaResolvable(a.kind));
+    if (resolvable.length === 0) {
+      if (unresolvable.length > 0) {
+        this.io.info(
+          "I can't preview metadata for GEO/ArrayExpress ids up front — fetchngs resolves those during the run.",
+        );
+      }
+      return;
+    }
+    const rows: RunMetadata[] = [];
+    let failed = false;
+    for (const a of resolvable) {
+      try {
+        const res = await fetch(buildEnaFileReportUrl(a.id));
+        if (!res.ok) {
+          failed = true;
+          continue;
+        }
+        rows.push(...parseEnaFileReport(await res.text()));
+      } catch {
+        failed = true;
+      }
+    }
+    if (rows.length === 0) {
+      this.io.info("(Couldn't reach ENA to preview the metadata — proceeding without a preview.)");
+      return;
+    }
+    const s = summarizeRunMetadata(rows);
+    this.io.say("Before downloading, here's what these accessions resolve to (via ENA):");
+    this.io.info(`  • ${s.runs} sequencing run(s)`);
+    if (s.organisms.length > 0) this.io.info(`  • Organism: ${s.organisms.join(", ")}`);
+    if (s.strategies.length > 0) this.io.info(`  • Strategy: ${s.strategies.join(", ")}`);
+    if (s.layouts.length > 0) this.io.info(`  • Layout: ${s.layouts.join(", ")}`);
+    if (s.totalReads > 0) this.io.info(`  • Total reads: ${s.totalReads.toLocaleString()}`);
+    this.io.info(`  • Approx. download size: ${s.hasBytes ? formatBytes(s.totalBytes) : "unknown"}`);
+    if (unresolvable.length > 0) {
+      this.io.info(`  (${unresolvable.length} GEO/ArrayExpress id(s) will be resolved by fetchngs during the run.)`);
+    }
+    if (failed) this.io.info("  (Some accessions couldn't be resolved via ENA; fetchngs will still try them.)");
   }
 
   /**

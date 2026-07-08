@@ -55,6 +55,8 @@ src/
 │   ├── environment.ts  detects backends, interactive selection, Nextflow/Conda/Java bootstrap (Phase 3)
 │   ├── executor.ts   executor selection (local/Slurm/SGE/LSF/PBS/AWS Batch) + Nextflow -c config (Phase 3)
 │   ├── fetchngs.ts   public-data accession detection + nf-core/fetchngs command builders (Phase 6)
+│   ├── fetchngsMetadata.ts  ENA Portal metadata preview before downloading (organism/strategy/size) (Phase 6)
+│   ├── fetchngsCache.ts  cache key/dir for reusing fetchngs downloads across runs (Phase 6)
 │   ├── followUp.ts   runnable follow-up chaining — resolve upstream inputs + build command (Phase 2)
 │   ├── negotiation.ts  infrastructure alternatives (cap/cluster/cloud) with rough time/cost/feasibility (Phase 3)
 │   ├── staging.ts    disk-footprint estimate, disk-pressure check, image/env cache dirs (Phase 3)
@@ -223,11 +225,14 @@ adapter, check whether the service is OpenAI-compatible — if so, the existing
 - **Public-data retrieval (Phase 6).** `execution/fetchngs.ts` detects accession
   ids in the request (SRA/ENA/DDBJ, GEO, BioProject/BioSample, ArrayExpress) with
   anchored regexes and builds a pinned `nf-core/fetchngs` run (all pure/testable).
-  `stateMachine.ts::phaseFetchData` runs after pipeline selection: it offers the
-  download, executes it through the normal `runNextflow` path, validates the
-  emitted samplesheet against the pipeline's columns and sets it on the session.
-  `parameterFilling.ts` then skips manual samplesheet construction (the `dataReady`
-  guard). Every failure mode falls back to normal local-file parameterization.
+  `stateMachine.ts::phaseFetchData` runs after pipeline selection: it previews the
+  accessions' metadata (organism/strategy/rough size) via the ENA Portal API
+  (`fetchngsMetadata.ts`), reuses a cached download of the same accessions when one
+  exists (`fetchngsCache.ts`), otherwise offers the download, executes it through
+  the normal `runNextflow` path, validates the emitted samplesheet against the
+  pipeline's columns and sets it on the session. `parameterFilling.ts` then skips
+  manual samplesheet construction (the `dataReady` guard). Every failure mode falls
+  back to normal local-file parameterization.
 - **Content-based ingestion.** `parameterFilling.ts::resolveFastqScan` prefers the
   fast extension-based `scanFastqs`; when a folder has no `.fastq/.fq` files it
   falls back to `samplesheet.ts::scanSequenceDir`, which sniffs each file's bytes

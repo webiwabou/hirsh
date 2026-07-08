@@ -14,7 +14,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /** Entries a workspace `.gitignore` should carry (runs are large; memory is private). */
-export const WORKSPACE_GITIGNORE = ["runs/", ".hirsh/", ".nextflow/", ".nextflow.log*", "work/"];
+export const WORKSPACE_GITIGNORE = [
+  "runs/",
+  ".hirsh/",
+  ".hirsh-cache/",
+  ".nextflow/",
+  ".nextflow.log*",
+  "work/",
+];
 
 /** A compact, commented starter `config.yaml` for a new workspace. */
 export function starterConfigYaml(): string {
