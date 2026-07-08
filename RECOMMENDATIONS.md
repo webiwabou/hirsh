@@ -438,8 +438,21 @@ one-off analysis into reusable, community-grade software.
   improvement (`composition/packaging.ts` + `execution/git.ts`, unit-tested; the
   patched config verified to still parse).
   - ⬜ Remaining: generated `nf-test` tests and full-size `test`/`test_full` data.
-- 🔵 **Local quality gate.** `nf-core lint` runs in the composition loop and after
-  packaging (Phase 4); iterating fixes automatically until green is still to do.
+- ✅ **Local quality gate (iterates toward green).** `nf-core lint` runs in the
+  composition loop, and after packaging Hirsh now **iterates lint → auto-fix →
+  lint** (up to 3 rounds): it applies the fixes it can — re-adding missing standard
+  files and manifest fields, and stripping leftover `TODO nf-core:` markers (never
+  rewriting pinned `modules/nf-core` files) — and stops when the project is
+  lint-clean or the failure count stops improving, reporting the trajectory
+  (e.g. `12 → 6 → 5`). Packaging also writes more of the standard files lint
+  expects (`.editorconfig`, `.gitattributes`, `CITATION.cff`, `.github/CONTRIBUTING.md`,
+  a PR template). Honest that the remaining failures (`files_unchanged`, schema
+  specifics) need the full nf-core template or manual edits — a freshly composed
+  pipeline won't be fully green yet (`composition/lintFix.ts`:
+  `planLintFixes`/`stripNfCoreTodos`/`shouldContinueFixing`, pure/unit-tested;
+  `iterateLintFixes` wired).
+  - ⬜ Remaining: reach a fully green lint by generating from the official nf-core
+    template (`nf-core pipelines create`) rather than a minimal scaffold.
 - 🔵 **Assisted contribution.** For a custom local tool, Hirsh writes it out in the
   nf-core/modules layout — `main.nf` (no generator comment), `meta.yml`,
   `environment.yml` (conda) and an `nf-test` stub test with the right tags — under

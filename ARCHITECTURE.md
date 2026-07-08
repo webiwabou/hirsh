@@ -74,7 +74,8 @@ src/
 │   ├── localToolProposal.ts  LLM proposes local tools for gaps the modules don't cover (Phase 4)
 │   ├── generator.ts  writes an nf-core-structured project + installs the modules
 │   ├── run.ts        real-run command builder for a composed pipeline (try-before-you-publish, Phase 5)
-│   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs + manifest patch for sharing (Phase 5)
+│   ├── packaging.ts  LICENSE/CHANGELOG/CoC/CI/docs/editorconfig/CITATION.cff + manifest patch for sharing (Phase 5)
+│   ├── lintFix.ts    plans nf-core lint auto-fixes + strips template TODOs; drives the lint→fix→lint loop (Phase 5)
 │   ├── contribution.ts  writes a local tool in nf-core/modules layout + nf-test for a PR (Phase 5)
 │   ├── novelty.ts    NOVELTY.md manifest — reused nf-core modules vs new custom tools (Phase 5)
 │   ├── inclusion.ts  nf-core inclusion guide + name check for adopting a pipeline (Phase 5)

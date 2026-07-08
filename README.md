@@ -595,9 +595,15 @@ compose often.
 
 After composing, Hirsh can (opt-in) **package the project to nf-core standards**:
 it adds a `LICENSE` (MIT by default), `CHANGELOG.md`, `CODE_OF_CONDUCT.md`,
-`.gitignore`, a CI workflow and `docs/`, fills in the `nextflow.config` manifest
-(author/homePage), turns the project into a git repository, and re-runs
-`nf-core lint` to show the improved score.
+`.gitignore`, `.editorconfig`, `.gitattributes`, `CITATION.cff`, a CI workflow,
+`.github/` templates and `docs/`, fills in the `nextflow.config` manifest
+(author/homePage), and turns the project into a git repository. It then **iterates
+`nf-core lint` toward green** — lint → apply the fixes it can (re-add missing
+files/manifest fields, strip leftover `TODO nf-core:` markers, never touching
+pinned `modules/nf-core` files) → lint again, up to a few rounds — stopping when
+the project is lint-clean or the failures stop dropping, and reporting the
+trajectory (e.g. `12 → 6 → 5`). It's honest that the remaining failures need the
+full nf-core template or manual edits.
 
 It can then **publish to GitHub** via the `gh` CLI — but only with explicit
 confirmation, **defaulting to a private repository**, warning clearly that a
