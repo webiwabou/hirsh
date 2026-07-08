@@ -190,7 +190,9 @@ Make every supported pipeline safe to run for real and make its output land as
   live: all three pass. It runs in **CI on a weekly schedule** (plus manual
   dispatch) — off the per-PR checks since it needs network to fetch upstream
   schemas (`.github/workflows/verify-defs.yml`).
-  - ⬜ Remaining: diff non-enum default *values* too (informational).
+  - ✅ Diffs **non-enum default values** too (informational): `verify:defs` reports
+    when a declared default drifts from the upstream schema default, without failing
+    the check (`schemaCheck.ts::diffDefaults`, unit-tested).
 - ✅ **Self-correcting runs.** When a run fails nf-core's parameter validation
   ("Expected any of [...]"), Hirsh parses the error, shows the offending
   parameter(s) and their allowed values, and offers to fix each to a valid value
