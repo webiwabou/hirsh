@@ -629,8 +629,19 @@ The full realization: a scientific collaborator, not a command builder.
   Implemented as an `AutonomousIO` decorator over the confirmation layer, so the
   guardrail is structural: consequential confirms are tagged and never auto-answered
   (`cli/autonomousIO.ts`, unit-tested).
-  - ⬜ Remaining: a fully non-interactive "one-shot" mode that also derives missing
-    parameters from context/memory instead of asking.
+  - ✅ **Derives the reference from the organism.** Rather than blocking on "which
+    genome?", Hirsh maps the organism to its iGenomes key (human→GRCh38,
+    mouse→GRCm39, and rat/zebrafish/fly/worm/yeast/arabidopsis/…), constrained to
+    the pipeline's accepted keys. In autonomous mode it fills the reference itself
+    (`[auto] genome → GRCh38`); interactively it offers the derived key as the
+    prompt default. Prefers a remembered key over a derived one, so it combines with
+    per-project memory (first run derives, later runs remember); an underivable
+    organism still asks — genuinely missing info is never fabricated
+    (`conversation/inference.ts::deriveGenomeKey`, pure/unit-tested; wired into
+    `fillReferenceParams`).
+  - ⬜ Remaining: derive more from context/memory (data type, common optional
+    params) and a fully non-interactive one-shot that never blocks (e.g. falls back
+    to the test profile when a required input truly can't be resolved).
 
 ---
 
@@ -659,4 +670,4 @@ The full realization: a scientific collaborator, not a command builder.
 - ✅ Interprets results as science, quantitatively and biologically — concrete numbers, meaning in context of the objective, and revisiting pre-run design caveats
 - 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md, a paste-ready methods paragraph, and a self-contained REPORT.html with inline figures; richer figures and per-tool inline citations next)
 - 🔵 Contributes novel, standards-compliant modules and pipelines back to nf-core (packages + publishes to GitHub today; nf-core/modules PRs and inclusion next)
-- 🔵 Requires zero Nextflow/infra knowledge from the scientist (guided throughout; an autonomous mode runs reversible steps unattended)
+- 🔵 Requires zero Nextflow/infra knowledge from the scientist (guided throughout; an autonomous mode runs reversible steps unattended and derives references from the organism)

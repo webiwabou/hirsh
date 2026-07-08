@@ -367,6 +367,12 @@ files are) and **stopping at decisions only you should make**: publishing,
 overriding a resource/disk safety refusal, or otherwise running against advice. The
 guardrail is structural — consequential prompts are tagged and never auto-answered.
 
+Where it can, Hirsh **derives** answers instead of asking: told the organism is
+human it fills the reference genome itself (`[auto] genome → GRCh38`), mouse →
+GRCm39, and so on — constrained to the keys the pipeline accepts, preferring a key
+remembered from a past run. An organism it can't map still prompts you (it never
+fabricates a reference).
+
 ## Project memory
 
 Hirsh remembers your past analyses across sessions in a **local, private** store
