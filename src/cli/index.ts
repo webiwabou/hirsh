@@ -7,8 +7,10 @@
  * environment errors are surfaced as clear messages, never as raw stack traces.
  */
 import { existsSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import chalk from "chalk";
 import { resolveWorkspace } from "./workspace.js";
+import { runInit } from "./init.js";
 import { ConfigError, loadConfig } from "../config/loadConfig.js";
 import type { HirshConfig } from "../config/types.js";
 import { createProvider, ProviderError, type LLMProvider } from "../llm/index.js";
@@ -61,7 +63,27 @@ function fatal(message: string): never {
   process.exit(1);
 }
 
+/** `hirsh init [path]` — scaffold a project workspace, then exit (no REPL). */
+function handleInit(args: string[]): void {
+  const pathArg = args[1] && !args[1].startsWith("-") ? args[1] : ".";
+  const res = runInit(resolve(process.cwd(), pathArg));
+  process.stdout.write(chalk.bold(`\nInitialized Hirsh workspace at ${res.workspace}\n`));
+  for (const f of res.created) process.stdout.write(chalk.green(`  created  ${f}\n`));
+  for (const f of res.updated) process.stdout.write(chalk.cyan(`  updated  ${f}\n`));
+  for (const f of res.skipped) process.stdout.write(chalk.gray(`  kept     ${f} (already present)\n`));
+  process.stdout.write(
+    chalk.gray("\nEdit config.yaml, then run ") + chalk.cyan("hirsh") + chalk.gray(" here to begin.\n"),
+  );
+}
+
 async function main(): Promise<void> {
+  // --- Subcommands ---
+  const argv = process.argv.slice(2);
+  if (argv[0] === "init") {
+    handleInit(argv);
+    return;
+  }
+
   // --- Workspace ---
   // Operate inside the scientist's chosen project folder (like an editor opened
   // in a directory): runs, ./config.yaml and per-project memory land there, not
