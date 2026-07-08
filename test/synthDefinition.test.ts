@@ -3,6 +3,7 @@ import { parse as parseYaml } from "yaml";
 import {
   buildSynthesizedDefinition,
   definitionFileName,
+  detectResultOutputs,
   renderDefinitionYaml,
   type DefinitionSource,
 } from "../src/pipelines/synthDefinition.js";
@@ -64,10 +65,18 @@ describe("buildSynthesizedDefinition", () => {
     expect(def.useWhen.join(" ")).toMatch(/atac seq/i);
   });
 
-  it("leaves results as a single generic directory to refine", () => {
+  it("leaves results as a single generic directory to refine when nothing is learned", () => {
     expect(def.results.outdirParam).toBe("outdir");
     expect(def.results.outputs).toHaveLength(1);
     expect(def.results.outputs[0]).toMatchObject({ path: ".", kind: "directory" });
+  });
+
+  it("uses learned outputs when provided", () => {
+    const learned = detectResultOutputs(["multiqc/multiqc_report.html", "variants/a.vcf.gz"]);
+    const withLearned = buildSynthesizedDefinition(SOURCE, SPEC, learned);
+    const kinds = withLearned.results.outputs.map((o) => o.kind);
+    expect(kinds).toContain("multiqc_html");
+    expect(kinds).toContain("vcf_dir");
   });
 
   it("produces a definition that satisfies the registry's validation contract", () => {
@@ -89,6 +98,31 @@ describe("renderDefinitionYaml", () => {
     const parsed = parseYaml(yaml);
     expect(parsed.name).toBe("nf-core/atacseq");
     expect(parsed.params.find((p: { name: string }) => p.name === "aligner").choices).toEqual(["bwa", "bowtie2"]);
+  });
+});
+
+describe("detectResultOutputs", () => {
+  it("detects the MultiQC report (preferring the shallowest) and VCF dirs", () => {
+    const outs = detectResultOutputs([
+      "star_salmon/multiqc/multiqc_report.html",
+      "multiqc/multiqc_report.html",
+      "variant_calling/sampleA/sampleA.vcf.gz",
+      "variant_calling/sampleB/sampleB.vcf.gz",
+      "pipeline_info/execution_trace.txt",
+    ]);
+    const multiqc = outs.find((o) => o.kind === "multiqc_html");
+    expect(multiqc?.path).toBe("multiqc/multiqc_report.html"); // shallowest wins
+    const vcfDirs = outs.filter((o) => o.kind === "vcf_dir").map((o) => o.path);
+    expect(vcfDirs).toEqual(["variant_calling/sampleA", "variant_calling/sampleB"]);
+    // Always ends with a catch-all directory.
+    expect(outs.at(-1)).toMatchObject({ path: ".", kind: "directory" });
+  });
+
+  it("returns just a catch-all directory when nothing notable is found", () => {
+    const outs = detectResultOutputs(["some/file.txt", "another/thing.log"]);
+    expect(outs).toHaveLength(1);
+    expect(outs[0].kind).toBe("directory");
+    expect(outs[0].description).toMatch(/refine these paths/);
   });
 });
 

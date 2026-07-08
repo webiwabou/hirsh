@@ -79,14 +79,63 @@ function columnDescription(col: InputColumn): string {
   return `${col.name} value${col.required ? "" : " (optional)"}.`;
 }
 
+const GENERIC_OUTPUT: ResultOutput = {
+  path: ".",
+  kind: "directory",
+  description:
+    "All pipeline outputs. Auto-generated definition — refine these output paths " +
+    "(e.g. the MultiQC report and key tables) for richer, per-file interpretation.",
+};
+
+/**
+ * Learns concrete `results.outputs` from a completed run's file listing (relative
+ * paths under the outdir), so a curated definition interprets real files instead
+ * of a generic directory. Detects, by nf-core convention, the MultiQC report and
+ * VCF directories; always keeps a catch-all directory so nothing is missed. Pure.
+ */
+export function detectResultOutputs(relPaths: string[]): ResultOutput[] {
+  const outputs: ResultOutput[] = [];
+
+  // MultiQC aggregate report — universal across nf-core pipelines. Prefer the
+  // shallowest match (the top-level report over a per-tool one).
+  const multiqc = relPaths
+    .filter((p) => /(^|\/)multiqc[^/]*\.html$/i.test(p) || /multiqc_report\.html$/i.test(p))
+    .sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0];
+  if (multiqc) {
+    outputs.push({ path: multiqc, kind: "multiqc_html", description: "Aggregated MultiQC quality report." });
+  }
+
+  // Directories that contain variant calls.
+  const vcfDirs = new Set<string>();
+  for (const p of relPaths) {
+    if (/\.vcf(\.gz)?$/i.test(p)) vcfDirs.add(p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".");
+  }
+  for (const d of [...vcfDirs].filter((d) => d !== ".").sort()) {
+    outputs.push({ path: d, kind: "vcf_dir", description: `Variant calls (VCF) under ${d}.` });
+  }
+
+  // Catch-all so results interpretation always lists everything else.
+  outputs.push({
+    path: ".",
+    kind: "directory",
+    description:
+      outputs.length > 0
+        ? "All other pipeline outputs."
+        : "All pipeline outputs (no MultiQC/VCF detected; refine these paths for richer interpretation).",
+  });
+  return outputs;
+}
+
 /**
  * Builds a full `PipelineDefinition` from a catalog pipeline's synthesized schema
- * spec. Params and samplesheet columns come straight from the schema; results are
- * left as a single generic directory for a human to refine. Pure.
+ * spec. Params and samplesheet columns come straight from the schema. `results`
+ * uses `learnedOutputs` when given (detected from a completed run), otherwise a
+ * single generic directory for a human to refine. Pure.
  */
 export function buildSynthesizedDefinition(
   source: DefinitionSource,
   spec: SynthesizedSpec,
+  learnedOutputs?: ResultOutput[],
 ): PipelineDefinition {
   const columns: SamplesheetColumn[] = spec.columns.map((c) => ({
     name: c.name,
@@ -122,15 +171,8 @@ export function buildSynthesizedDefinition(
     params.push(param);
   }
 
-  const outputs: ResultOutput[] = [
-    {
-      path: ".",
-      kind: "directory",
-      description:
-        "All pipeline outputs. Auto-generated definition — refine these output paths " +
-        "(e.g. the MultiQC report and key tables) for richer, per-file interpretation.",
-    },
-  ];
+  const outputs: ResultOutput[] =
+    learnedOutputs && learnedOutputs.length > 0 ? learnedOutputs : [GENERIC_OUTPUT];
 
   return {
     name: source.fullName,

@@ -9,7 +9,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import type { LLMProvider, ChatMessage } from "../llm/index.js";
 import type { ResultOutput } from "../pipelines/types.js";
 import type { QueryContext } from "../conversation/session.js";
@@ -160,6 +160,11 @@ function walkVcfs(root: string, cap = 40, maxDepth = 5): string[] {
 /** HTML reports anywhere under a directory (e.g. a follow-up's report/ folder). */
 export function findHtmlReports(root: string, cap = 5): string[] {
   return walkFiles(root, (e) => /\.html?$/i.test(e), cap, 4);
+}
+
+/** All files under a directory, as paths relative to it (for learning outputs). */
+export function listRelativeFiles(root: string, cap = 600): string[] {
+  return walkFiles(root, () => true, cap, 6).map((p) => relative(root, p));
 }
 
 /**

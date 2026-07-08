@@ -12,7 +12,7 @@ import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
 import { persistExecutionChoice, type ExecutionUpdates } from "../config/writeConfig.js";
 import type { LLMProvider } from "../llm/index.js";
-import type { PipelineCitation, PipelineDefinition } from "../pipelines/types.js";
+import type { PipelineCitation, PipelineDefinition, ResultOutput } from "../pipelines/types.js";
 import { checkEnvironment } from "../execution/envCheck.js";
 import {
   BACKENDS,
@@ -88,6 +88,7 @@ import type { EnvReport } from "../execution/envCheck.js";
 import {
   findHtmlReports,
   gatherResults,
+  listRelativeFiles,
   summarizeResults,
   type InterpretablePipeline,
   type ResultsReport,
@@ -135,6 +136,7 @@ import {
 import {
   buildSynthesizedDefinition,
   definitionFileName,
+  detectResultOutputs,
   renderDefinitionYaml,
 } from "../pipelines/synthDefinition.js";
 import { invalidateRegistryCache, loadRegistry, userDefinitionsDir } from "../pipelines/registry.js";
@@ -512,7 +514,7 @@ export class Agent {
    * schema, writes an honest auto-generated YAML to ~/.bioagent/pipelines, and
    * confirms it loads (removing it if it doesn't). Never blocks the run.
    */
-  private async offerCuration(pipeline: NfCorePipeline): Promise<void> {
+  private async offerCuration(pipeline: NfCorePipeline, outdir?: string): Promise<void> {
     if (this.registry.some((p) => p.name === pipeline.fullName)) return; // already curated
     if (!pipeline.latestRelease) return;
     const yes = await this.io.confirm(
@@ -528,6 +530,13 @@ export class Agent {
       this.io.warn("Couldn't read the pipeline's schema; not curating.");
       return;
     }
+    // Learn the real result outputs (MultiQC, VCF dirs) from the completed run so
+    // the curated definition interprets concrete files, not a generic directory.
+    let learned: ResultOutput[] | undefined;
+    if (outdir && existsSync(outdir)) {
+      const files = listRelativeFiles(outdir);
+      if (files.length > 0) learned = detectResultOutputs(files);
+    }
     const def = buildSynthesizedDefinition(
       {
         fullName: pipeline.fullName,
@@ -537,6 +546,7 @@ export class Agent {
         url: pipeline.url,
       },
       spec,
+      learned,
     );
     const yaml = renderDefinitionYaml(def, new Date().toISOString().slice(0, 10));
     const dir = userDefinitionsDir();
@@ -556,7 +566,14 @@ export class Agent {
       this.io.warn("Couldn't write the definition: " + (err instanceof Error ? err.message : String(err)));
       return;
     }
-    this.io.say(`Curated ${pipeline.fullName} → ${file}`);
+    const learnedNote =
+      learned && learned.some((o) => o.kind !== "directory")
+        ? ` (learned its ${learned
+            .filter((o) => o.kind !== "directory")
+            .map((o) => (o.kind === "multiqc_html" ? "MultiQC report" : o.path))
+            .join(", ")} from the run)`
+        : "";
+    this.io.say(`Curated ${pipeline.fullName} → ${file}${learnedNote}`);
     this.io.info(
       "Next session it'll be a guided pipeline. It's honest boilerplate — edit that file to refine its " +
         "result outputs, resources and citation DOI; delete it to revert to the schema-driven flow.",
@@ -668,7 +685,7 @@ export class Agent {
     this.io.say(`${pipeline} completed successfully.`);
     await this.interpretDirectoryRun(session, pipeline, `${description} (on your data)`, outdir);
     this.io.info(`Results: ${outdir}.`);
-    await this.offerCuration(top);
+    await this.offerCuration(top, outdir);
     return true;
   }
 
@@ -826,7 +843,7 @@ export class Agent {
     this.io.say(`${pipeline} test profile completed successfully.`);
     await this.interpretDirectoryRun(session, pipeline, `${description} (test profile)`, outdir);
     this.io.info(`Results: ${outdir}. To run it on your own data, its docs are at https://nf-co.re/${short}.`);
-    await this.offerCuration(top);
+    await this.offerCuration(top, outdir);
   }
 
   /**
