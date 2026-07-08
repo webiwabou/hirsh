@@ -357,7 +357,11 @@ negotiation and container/data staging are in; full toolchain bootstrapping
   the choice sets the matching nf-core profile and is recorded in provenance
   (`execution/environment.ts`, unit-tested). Conda/Mamba are now supported backends.
   The choice can be **saved back to config** as the default (see Phase 6).
-  - ⬜ Remaining: gate on Docker daemon reachability (not just the CLI being present).
+  - ✅ **Gates on Docker daemon reachability.** The environment check runs
+    `docker info`, not just `docker --version`: a present CLI with a down daemon is
+    reported as not usable, with a "start Docker or pick another backend" hint, so
+    the problem surfaces before a run instead of failing cryptically mid-way
+    (`execution/envCheck.ts::dockerStatus`, pure/unit-tested).
 
 ## Phase 4 — Composing pipelines from nf-core building blocks ✅ (runnable; refinements remain)
 
