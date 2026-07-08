@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reviewSamplesheetContent } from "../src/conversation/samplesheetReview.js";
+import { classifyBatchDesign, reviewSamplesheetContent } from "../src/conversation/samplesheetReview.js";
 
 describe("reviewSamplesheetContent", () => {
   it("returns nothing when there is no grouping column (plain rnaseq sheet)", () => {
@@ -56,5 +56,47 @@ describe("reviewSamplesheetContent", () => {
     const csv = ["sample,condition", "a1,only", "a2,only"].join("\n");
     const d = reviewSamplesheetContent(csv);
     expect(d.observations.some((o) => /Only one group/.test(o.message))).toBe(true);
+  });
+
+  it("flags a batch confounded with the condition as a risk", () => {
+    // Each batch holds a single condition → confounded.
+    const csv = [
+      "sample,condition,batch",
+      "t1,treated,b1", "t2,treated,b1", "t3,treated,b1",
+      "c1,control,b2", "c2,control,b2", "c3,control,b2",
+    ].join("\n");
+    const d = reviewSamplesheetContent(csv);
+    const risk = d.observations.find((o) => o.topic === "batch effects" && o.severity === "risk");
+    expect(risk?.message).toMatch(/confounded/);
+  });
+
+  it("recommends a batch covariate when batch crosses conditions", () => {
+    const csv = [
+      "sample,condition,batch",
+      "t1,treated,b1", "t2,treated,b2", "t3,treated,b1",
+      "c1,control,b1", "c2,control,b2", "c3,control,b2",
+    ].join("\n");
+    const d = reviewSamplesheetContent(csv);
+    const caution = d.observations.find((o) => o.topic === "batch effects" && o.severity === "caution");
+    expect(caution?.suggestion).toMatch(/covariate/);
+  });
+});
+
+describe("classifyBatchDesign", () => {
+  it("detects confounded, crossed and indeterminate designs", () => {
+    expect(
+      classifyBatchDesign([
+        { condition: "A", batch: "1" },
+        { condition: "B", batch: "2" },
+      ]),
+    ).toBe("confounded");
+    expect(
+      classifyBatchDesign([
+        { condition: "A", batch: "1" },
+        { condition: "B", batch: "1" },
+        { condition: "A", batch: "2" },
+      ]),
+    ).toBe("crossed");
+    expect(classifyBatchDesign([{ condition: "A", batch: "1" }])).toBe("none");
   });
 });

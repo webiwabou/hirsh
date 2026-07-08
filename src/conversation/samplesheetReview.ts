@@ -20,12 +20,43 @@ const GROUP_COLUMN_RE =
 const CONTROL_RE =
   /^(control|ctrl|untreated|vehicle|dmso|mock|wt|wild[\s_-]?type|wildtype|baseline|normal|reference|ref|healthy|placebo|naive|na[iï]ve|parental|uninfected|unstim(ulated)?|day[\s_-]?0|t0|d0|0h)$/i;
 
+/** Column names that denote a technical batch / processing variable. */
+const BATCH_COLUMN_RE =
+  /^(batch|lane|run|run_?id|flow_?cell|flowcell|date|processing_?date|prep|library_?prep|seq_?run|sequencing_?run|center|centre|plate|pool)$/i;
+
 /**
  * The group that reads as the control/reference level (untreated, vehicle, WT,
  * normal, baseline…), or null if none is recognizable. Pure. Case-insensitive.
  */
 export function detectControlGroup(groups: string[]): string | null {
   return groups.find((g) => CONTROL_RE.test(g.trim())) ?? null;
+}
+
+export type BatchDesign = "confounded" | "crossed" | "none";
+
+/**
+ * Classifies how a batch variable relates to the experimental condition from
+ * per-sample (condition, batch) pairs:
+ *  - "confounded": every batch contains a single condition (batch is nested in
+ *    condition) with ≥2 batches and ≥2 conditions — batch effects can't be
+ *    separated from the biology;
+ *  - "crossed": at least one batch spans multiple conditions — the batch effect
+ *    is estimable and should be modelled as a covariate;
+ *  - "none": not enough structure to judge (one batch or one condition).
+ * Pure.
+ */
+export function classifyBatchDesign(pairs: Array<{ condition: string; batch: string }>): BatchDesign {
+  const byBatch = new Map<string, Set<string>>();
+  const conditions = new Set<string>();
+  for (const { condition, batch } of pairs) {
+    if (condition === "" || batch === "") continue;
+    conditions.add(condition);
+    if (!byBatch.has(batch)) byBatch.set(batch, new Set());
+    byBatch.get(batch)!.add(condition);
+  }
+  if (byBatch.size < 2 || conditions.size < 2) return "none";
+  const anyBatchSpansConditions = [...byBatch.values()].some((cs) => cs.size >= 2);
+  return anyBatchSpansConditions ? "crossed" : "confounded";
 }
 
 export interface GroupCount {
@@ -151,6 +182,32 @@ export function reviewSamplesheetContent(
       suggestion:
         "Make sure a reference level is defined for each comparison — add or identify a control group, or set the reference explicitly in the contrasts.",
     });
+  }
+
+  // Batch/covariate analysis: is a technical batch variable confounded with the
+  // condition (can't be separated), or crossed (should be modelled as a covariate)?
+  const batchIdx = header.findIndex((h) => BATCH_COLUMN_RE.test(h));
+  if (batchIdx !== -1 && batchIdx !== groupIdx) {
+    const pairs = rows
+      .map((r) => ({ condition: (r[groupIdx] ?? "").trim(), batch: (r[batchIdx] ?? "").trim() }))
+      .filter((p) => p.condition !== "" && p.batch !== "");
+    const batchCol = header[batchIdx];
+    const design = classifyBatchDesign(pairs);
+    if (design === "confounded") {
+      observations.push({
+        severity: "risk",
+        topic: "batch effects",
+        message: `The "${batchCol}" variable is confounded with "${col}" — each ${batchCol} contains a single ${col}, so batch effects can't be separated from the biology.`,
+        suggestion: `Spread each condition across multiple ${batchCol}s (or vice versa); as designed, a difference could be batch rather than biological.`,
+      });
+    } else if (design === "crossed") {
+      observations.push({
+        severity: "caution",
+        topic: "batch effects",
+        message: `A "${batchCol}" variable is present and crosses the conditions — a technical batch effect is likely.`,
+        suggestion: `Include "${batchCol}" as a covariate in the model (e.g. ~ ${batchCol} + ${col}) so it's accounted for.`,
+      });
+    }
   }
 
   return { groupColumn: col, groupCounts, observations };
