@@ -304,10 +304,13 @@ HTML reports (open them in your browser):
   variant counts from VCFs), shows a **compact inline bar chart** of the key
   figures, and explains the findings **biologically** in the
   context of your objective — revisiting any design caveats flagged before the run
-  (e.g. a batch effect) and ending with a concrete next step. It can also write a
-  paste-ready **methods paragraph** (`METHODS.md`) with the exact
-  pipeline/Nextflow/tool versions and citations (DOIs). When the pipeline has a
-  runnable **follow-up** (e.g. rnaseq → differentialabundance), it offers to run
+  (e.g. a batch effect) and ending with a concrete next step. It writes a
+  **shareable `REPORT.html`** into the run directory — the interpretation, the key
+  numbers, **inline SVG figures** and links to MultiQC/methods/provenance, all
+  self-contained (no external dependencies) so you can open or share it directly.
+  It can also write a paste-ready **methods paragraph** (`METHODS.md`) with the
+  exact pipeline/Nextflow/tool versions and citations (DOIs). When the pipeline has
+  a runnable **follow-up** (e.g. rnaseq → differentialabundance), it offers to run
   it directly on these results (see below).
 
 Every run also writes a **reproducibility bundle** into its run directory —

@@ -565,8 +565,20 @@ The full realization: a scientific collaborator, not a command builder.
   versions nf-core records in `pipeline_info/…software_versions` — with the
   pipeline's citation (DOI) plus the nf-core and Nextflow papers
   (`results/methods.ts`, unit-tested; verified render).
-  - ⬜ Remaining: generate figures and a fuller reproducible report; per-tool
-    citations inline (today they point to CITATIONS.md).
+  - ✅ **Shareable HTML report.** After interpreting a run, Hirsh writes a
+    self-contained `REPORT.html` into the run directory — the plain-language
+    interpretation, the study metadata, the key numbers (outputs table, flagging
+    anything not generated), **inline SVG figures** (per-sample library sizes,
+    significant genes per contrast — no external libraries), and links to the
+    MultiQC report, `METHODS.md` and `PROVENANCE.md`. It opens in any browser and
+    is safe to share or archive (no external dependencies). Wired into all four
+    interpretation paths — primary, composed, follow-up and established/test-profile
+    runs — by capturing the summary the interpreter already produces
+    (`results/report.ts`: `chartToSvg`/`renderResultsReportHtml` pure + unit-tested;
+    `writeResultsReport` best-effort, never blocks a run).
+  - ⬜ Remaining: richer figures (a volcano plot from the DE table, MultiQC
+    per-sample metric charts); per-tool citations inline (today they point to
+    CITATIONS.md); and an optional PDF export.
 - 🔵 **End-to-end autonomy with guardrails.** With `autonomy.enabled` (or `--auto`),
   Hirsh runs a request to an interpreted answer without pausing for reversible
   confirmations — it auto-answers those with their intended value and announces each
@@ -604,6 +616,6 @@ The full realization: a scientific collaborator, not a command builder.
 - 🔵 Runs on laptop, HPC and cloud transparently (executor selection for local/Slurm/SGE/LSF/PBS/AWS Batch today; Azure/GCP and credential handling next)
 - ✅ Composes pipelines that mix nf-core modules with the scientist's own tools (generated modules/local/ + nf-core, runs via stub)
 - ✅ Interprets results as science, quantitatively and biologically — concrete numbers, meaning in context of the objective, and revisiting pre-run design caveats
-- 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md today; figures/methods next)
+- 🔵 Produces reproducible, publication-ready provenance (run manifest + PROVENANCE.md, a paste-ready methods paragraph, and a self-contained REPORT.html with inline figures; richer figures and per-tool inline citations next)
 - 🔵 Contributes novel, standards-compliant modules and pipelines back to nf-core (packages + publishes to GitHub today; nf-core/modules PRs and inclusion next)
 - 🔵 Requires zero Nextflow/infra knowledge from the scientist (guided throughout; an autonomous mode runs reversible steps unattended)
