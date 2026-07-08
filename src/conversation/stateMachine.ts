@@ -7,7 +7,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { ContainerEngine, ExecutorName, HirshConfig } from "../config/types.js";
 import { persistExecutionChoice, type ExecutionUpdates } from "../config/writeConfig.js";
@@ -94,6 +94,7 @@ import {
   type ResultsReport,
 } from "../results/interpreter.js";
 import { renderBarChart } from "../results/charts.js";
+import { renderResultsReportHtml, type ReportArtifact } from "../results/report.js";
 import { buildMethods, readSoftwareVersions } from "../results/methods.js";
 import { ModuleRegistry, RegistryFetchError } from "../modules/registry.js";
 import { planComposition } from "../composition/planner.js";
@@ -781,9 +782,17 @@ export class Agent {
     }
     this.showCharts(report);
     this.io.say("\nResults summary:\n");
-    await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
+    const summaryText = await summarizeResults(
+      this.provider,
+      interpretable,
+      session.query,
+      report,
+      (c) => this.io.raw(c),
+      [],
+    );
     this.io.endStream();
     for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    this.writeResultsReport(name, title, session.query, report, summaryText, dirname(outdir));
   }
 
   /**
@@ -1409,11 +1418,75 @@ export class Agent {
     }
     this.showCharts(report);
     this.io.say("\nResults summary:\n");
-    await summarizeResults(this.provider, interpretable, session.query, report, (c) => this.io.raw(c), []);
+    const summaryText = await summarizeResults(
+      this.provider,
+      interpretable,
+      session.query,
+      report,
+      (c) => this.io.raw(c),
+      [],
+    );
     this.io.endStream();
     if (report.htmlReports.length > 0) {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
+    }
+    this.writeResultsReport(
+      resolved.plan.pipelineName,
+      resolved.plan.description,
+      session.query,
+      report,
+      summaryText,
+      dirname(outdir),
+    );
+  }
+
+  /**
+   * Writes a self-contained REPORT.html (interpretation + SVG figures + links)
+   * into the run directory and points the user at it. Best-effort — a report must
+   * never block or fail a run. Links methods/provenance/params when they exist.
+   */
+  private writeResultsReport(
+    name: string,
+    title: string,
+    query: QueryContext,
+    report: ResultsReport,
+    summaryText: string,
+    runDir: string,
+  ): void {
+    if (!summaryText.trim()) return;
+    try {
+      const artifacts: ReportArtifact[] = [];
+      for (const [label, rel] of [
+        ["Methods", "METHODS.md"],
+        ["Provenance", "PROVENANCE.md"],
+        ["Parameters", "params.yaml"],
+      ] as const) {
+        const p = join(runDir, rel);
+        if (existsSync(p)) artifacts.push({ label, path: p });
+      }
+      const html = renderResultsReportHtml({
+        pipelineName: name,
+        pipelineTitle: title,
+        query,
+        outdir: report.outdir,
+        outputs: report.outputs.map((o) => ({
+          path: o.output.path,
+          description: o.output.description,
+          found: o.found,
+          detail: o.detail,
+        })),
+        charts: report.charts ?? [],
+        summaryText,
+        htmlReports: report.htmlReports,
+        artifacts,
+        generatedOn: new Date().toISOString().slice(0, 10),
+      });
+      const file = join(runDir, "REPORT.html");
+      writeFileSync(file, html, "utf8");
+      this.io.info(`Shareable report: ${file}`);
+    } catch {
+      /* never block on the report */
     }
   }
 
@@ -2467,7 +2540,7 @@ export class Agent {
 
     this.showCharts(report);
     this.io.say("Results summary:\n");
-    await summarizeResults(
+    const summaryText = await summarizeResults(
       this.provider,
       pipeline,
       session.query,
@@ -2481,6 +2554,15 @@ export class Agent {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
     }
+
+    this.writeResultsReport(
+      pipeline.name,
+      pipeline.title,
+      session.query,
+      report,
+      summaryText,
+      session.runDir ?? dirname(report.outdir),
+    );
 
     if (pipeline.followUp) {
       this.io.say(
@@ -2732,7 +2814,7 @@ export class Agent {
 
     this.showCharts(report);
     this.io.say("\nFollow-up results summary:\n");
-    await summarizeResults(
+    const summaryText = await summarizeResults(
       this.provider,
       interpretable,
       session.query,
@@ -2745,6 +2827,14 @@ export class Agent {
       this.io.info("HTML reports (open them in your browser):");
       for (const html of report.htmlReports) this.io.info(`  • ${html}`);
     }
+    this.writeResultsReport(
+      interpretable.name,
+      interpretable.title,
+      session.query,
+      report,
+      summaryText,
+      dirname(outdir),
+    );
   }
 
   /**
