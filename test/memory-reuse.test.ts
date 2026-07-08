@@ -86,6 +86,46 @@ describe("fillReferenceParams — remembered genome reuse", () => {
   });
 });
 
+describe("fillReferenceParams — genome derived from organism", () => {
+  it("in autonomous mode, fills the genome from the organism without asking", async () => {
+    const io = new ScriptedIO([]); // no answers available — must not ask
+    const s = createSession();
+    s.query.organism = "Mus musculus";
+    await fillReferenceParams(io, s, pipeline, { references: {}, samplesheets: [] }, { autonomous: true });
+    expect(s.paramValues.genome).toBe("GRCm39"); // the only allowed key, derived from mouse
+  });
+
+  it("interactively, offers the derived key as the default (Enter accepts it)", async () => {
+    const io = new ScriptedIO([""]); // Enter at the genome prompt
+    const s = createSession();
+    s.query.organism = "mouse";
+    await fillReferenceParams(io, s, pipeline, { references: {}, samplesheets: [] });
+    expect(s.paramValues.genome).toBe("GRCm39");
+  });
+
+  it("prefers a remembered key over a derived one", async () => {
+    const io = new ScriptedIO([]);
+    const s = createSession();
+    s.query.organism = "mouse"; // would derive GRCm39 too, but remembered wins the source
+    await fillReferenceParams(
+      io,
+      s,
+      pipeline,
+      { references: { genome: ["GRCm39"] }, samplesheets: [] },
+      { autonomous: true },
+    );
+    expect(s.paramValues.genome).toBe("GRCm39");
+  });
+
+  it("in autonomous mode with an underivable organism, still asks (genuinely missing)", async () => {
+    const io = new ScriptedIO(["GRCm39"]); // has to ask → we answer
+    const s = createSession();
+    s.query.organism = "some unnamed microbe";
+    await fillReferenceParams(io, s, pipeline, { references: {}, samplesheets: [] }, { autonomous: true });
+    expect(s.paramValues.genome).toBe("GRCm39");
+  });
+});
+
 describe("useRememberedSamplesheet", () => {
   let dir: string;
   let csv: string;

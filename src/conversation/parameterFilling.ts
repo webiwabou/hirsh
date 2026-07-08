@@ -20,6 +20,7 @@ import type { PipelineDefinition, PipelineParam } from "../pipelines/types.js";
 import type { AgentIO } from "./io.js";
 import type { Session } from "./session.js";
 import { classifyPathAnswer, pathReference, wantsTestProfile } from "./pathInput.js";
+import { deriveGenomeKey } from "./inference.js";
 import {
   checkSomaticDesign,
   inferPairs,
@@ -72,6 +73,7 @@ export async function fillParameters(
   pipeline: PipelineDefinition,
   config: HirshConfig,
   suggestions?: MemorySuggestions,
+  opts?: { autonomous?: boolean },
 ): Promise<{ runDir: string }> {
   const { runDir, outdir } = prepareRunDir(config, pipeline);
   session.outdir = outdir;
@@ -99,7 +101,7 @@ export async function fillParameters(
     if (!haveSamplesheet) await buildSamplesheet(io, session, pipeline, runDir, suggestions);
     // buildSamplesheet may have switched to the test profile (the user changed
     // their mind at the file prompt); if so, skip the real-data reference params.
-    if (!session.useTestProfile) await fillReferenceParams(io, session, pipeline, suggestions);
+    if (!session.useTestProfile) await fillReferenceParams(io, session, pipeline, suggestions, opts);
   }
 
   await fillOptionalParams(io, session, pipeline);
@@ -114,6 +116,7 @@ export async function fillReferenceParams(
   session: Session,
   pipeline: PipelineDefinition,
   suggestions?: MemorySuggestions,
+  opts?: { autonomous?: boolean },
 ): Promise<void> {
   const hasGenome = pipeline.params.some((p) => p.name === "genome");
   if (!hasGenome) return;
@@ -124,15 +127,32 @@ export async function fillReferenceParams(
   const remFasta = suggestions?.references.fasta?.[0];
   const remGtf = suggestions?.references.gtf?.[0];
 
-  const genomePrompt = remGenome
-    ? `iGenomes reference genome key${choices}. Remembered from a past run: ${remGenome}. ` +
-      "Press Enter to reuse it, type another key, or 'none' to provide FASTA+GTF:"
+  // A remembered key wins; otherwise derive one from the organism (GRCh38 for
+  // human, GRCm39 for mouse, …), constrained to what the pipeline accepts.
+  const derived = deriveGenomeKey(session.query.organism, genomeParam.choices);
+  const suggested = remGenome ?? derived?.key;
+  const suggestedSource = remGenome
+    ? "remembered from a past run"
+    : derived
+      ? `derived from organism "${derived.organism}"`
+      : null;
+
+  // Autonomy: fill the reference ourselves when we can, instead of asking.
+  if (opts?.autonomous && suggested) {
+    session.paramValues.genome = suggested;
+    io.info(`[auto] genome → ${suggested} (${suggestedSource}).`);
+    return;
+  }
+
+  const genomePrompt = suggested
+    ? `iGenomes reference genome key${choices}. ${suggestedSource![0].toUpperCase()}${suggestedSource!.slice(1)}: ${suggested}. ` +
+      "Press Enter to use it, type another key, or 'none' to provide FASTA+GTF:"
     : `iGenomes reference genome key${choices}. Leave empty if you prefer to provide your own FASTA+GTF:`;
   const genome = (await io.ask(genomePrompt)).trim();
 
-  if (remGenome && genome === "") {
-    session.paramValues.genome = remGenome;
-    io.info(`Reusing remembered genome ${remGenome}.`);
+  if (suggested && genome === "") {
+    session.paramValues.genome = suggested;
+    io.info(`Using ${suggested} (${suggestedSource}).`);
     return;
   }
   if (genome && genome.toLowerCase() !== "none") {

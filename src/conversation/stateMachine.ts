@@ -189,6 +189,8 @@ export class Agent {
     private readonly io: AgentIO,
     /** Path of the loaded config file, for persisting the env choice back. */
     private readonly configPath?: string,
+    /** Autonomous mode: derive what we can (references from organism) instead of asking. */
+    private readonly autonomous = false,
   ) {}
 
   async run(session: Session): Promise<void> {
@@ -226,6 +228,7 @@ export class Agent {
       pipeline,
       this.config,
       this.memorySuggestions(session.query),
+      { autonomous: this.autonomous },
     );
 
     // Scientific dialogue, now grounded in the actual samplesheet (per-group
