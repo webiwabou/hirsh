@@ -16,6 +16,8 @@ export interface Contrast {
   variable: string;
   reference: string;
   target: string;
+  /** Optional blocking factor / covariate (e.g. a crossed batch). */
+  blocking?: string;
 }
 
 function sanitizeId(s: string): string {
@@ -31,11 +33,13 @@ export function proposeContrasts(
   variable: string,
   groups: string[],
   control?: string | null,
+  blocking?: string | null,
 ): Contrast[] {
   const uniq = [...new Set(groups.map((g) => g.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (uniq.length < 2) return [];
   const ctrl = control && uniq.includes(control) ? control : detectControlGroup(uniq);
   const reference = ctrl ?? uniq[0];
+  const block = blocking?.trim() || undefined;
   return uniq
     .filter((g) => g !== reference)
     .map((target) => ({
@@ -43,13 +47,23 @@ export function proposeContrasts(
       variable,
       reference,
       target,
+      ...(block ? { blocking: block } : {}),
     }));
 }
 
-/** Renders contrasts as the differentialabundance `contrasts` CSV. Pure. */
+/**
+ * Renders contrasts as the differentialabundance `contrasts` CSV. Includes the
+ * optional `blocking` column only when at least one contrast carries a blocking
+ * factor. Pure.
+ */
 export function contrastsCsv(contrasts: Contrast[]): string {
-  const rows = contrasts.map((c) => `${c.id},${c.variable},${c.reference},${c.target}`);
-  return ["id,variable,reference,target", ...rows].join("\n") + "\n";
+  const withBlocking = contrasts.some((c) => c.blocking);
+  const header = withBlocking ? "id,variable,reference,target,blocking" : "id,variable,reference,target";
+  const rows = contrasts.map((c) => {
+    const base = `${c.id},${c.variable},${c.reference},${c.target}`;
+    return withBlocking ? `${base},${c.blocking ?? ""}` : base;
+  });
+  return [header, ...rows].join("\n") + "\n";
 }
 
 export interface ProposedContrasts {
@@ -57,19 +71,24 @@ export interface ProposedContrasts {
   contrasts: Contrast[];
   /** True when no control was recognizable and the reference was assumed. */
   assumedReference: boolean;
+  /** Batch column added as a blocking factor (a crossed batch), or null. */
+  blocking: string | null;
 }
 
 /**
  * Proposes contrasts from a condition samplesheet's CSV text, using its grouping
- * column. Returns null when there is no usable grouping column or fewer than two
- * groups. Pure.
+ * column — and, when a technical batch **crosses** the conditions, adds it as a
+ * blocking factor so differentialabundance models it out. Returns null when there
+ * is no usable grouping column or fewer than two groups. Pure.
  */
 export function proposeContrastsFromSheet(csvText: string): ProposedContrasts | null {
   const design = reviewSamplesheetContent(csvText);
   if (!design.groupColumn || design.groupCounts.length < 2) return null;
   const groups = design.groupCounts.map((g) => g.group);
   const control = detectControlGroup(groups);
-  const contrasts = proposeContrasts(design.groupColumn, groups, control);
+  // Only a *crossed* batch is a usable blocking factor; a confounded one is not.
+  const blocking = design.batchDesign === "crossed" ? design.batchColumn : null;
+  const contrasts = proposeContrasts(design.groupColumn, groups, control, blocking);
   if (contrasts.length === 0) return null;
-  return { variable: design.groupColumn, contrasts, assumedReference: control === null };
+  return { variable: design.groupColumn, contrasts, assumedReference: control === null, blocking };
 }

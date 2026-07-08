@@ -2779,6 +2779,9 @@ export class Agent {
 
     this.io.say(`I can build the contrasts from your "${proposed.variable}" column:`);
     for (const c of proposed.contrasts) this.io.info(`  • ${c.target} vs ${c.reference}`);
+    if (proposed.blocking) {
+      this.io.info(`  (blocking on "${proposed.blocking}" — a batch that crosses your conditions, so it's modelled out.)`);
+    }
     if (proposed.assumedReference) {
       this.io.warn(
         `No control group was recognizable, so I used "${proposed.contrasts[0].reference}" as the reference — ` +

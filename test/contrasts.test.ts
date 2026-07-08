@@ -47,6 +47,13 @@ describe("contrastsCsv", () => {
     const csv = contrastsCsv(proposeContrasts("condition", ["treated", "control"]));
     expect(csv).toBe("id,variable,reference,target\ntreated_vs_control,condition,control,treated\n");
   });
+
+  it("adds a blocking column when a blocking factor is present", () => {
+    const csv = contrastsCsv(proposeContrasts("condition", ["treated", "control"], "control", "batch"));
+    expect(csv).toBe(
+      "id,variable,reference,target,blocking\ntreated_vs_control,condition,control,treated,batch\n",
+    );
+  });
 });
 
 describe("proposeContrastsFromSheet", () => {
@@ -64,5 +71,24 @@ describe("proposeContrastsFromSheet", () => {
 
   it("returns null when there is no grouping column", () => {
     expect(proposeContrastsFromSheet("sample,fastq_1\ns1,a.fq")).toBeNull();
+  });
+
+  it("adds a crossed batch as a blocking factor, but not a confounded one", () => {
+    const crossed = [
+      "sample,condition,batch",
+      "t1,treated,b1", "t2,treated,b2",
+      "c1,control,b1", "c2,control,b2",
+    ].join("\n");
+    const r = proposeContrastsFromSheet(crossed)!;
+    expect(r.blocking).toBe("batch");
+    expect(r.contrasts[0].blocking).toBe("batch");
+
+    const confounded = [
+      "sample,condition,batch",
+      "t1,treated,b1", "t2,treated,b1",
+      "c1,control,b2", "c2,control,b2",
+    ].join("\n");
+    const r2 = proposeContrastsFromSheet(confounded)!;
+    expect(r2.blocking).toBeNull(); // confounded batch is unusable as a covariate
   });
 });

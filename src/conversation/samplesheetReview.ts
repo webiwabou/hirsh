@@ -69,6 +69,10 @@ export interface SamplesheetDesign {
   groupColumn: string | null;
   /** Biological replicates per group (distinct sample ids), largest first. */
   groupCounts: GroupCount[];
+  /** The detected technical batch column, or null. */
+  batchColumn: string | null;
+  /** How the batch relates to the condition (for a blocking factor / covariate). */
+  batchDesign: BatchDesign;
   observations: DesignObservation[];
 }
 
@@ -97,7 +101,7 @@ export function reviewSamplesheetContent(
   const { header, rows } = parseCsv(text);
   const groupIdx = detectGroupColumn(header);
   if (groupIdx === -1 || rows.length === 0) {
-    return { groupColumn: null, groupCounts: [], observations: [] };
+    return { groupColumn: null, groupCounts: [], batchColumn: null, batchDesign: "none", observations: [] };
   }
   const sampleIdx = header.findIndex((h) => /^(sample|sample_?id|id)$/i.test(h));
 
@@ -114,7 +118,7 @@ export function reviewSamplesheetContent(
     perGroup.get(group)!.add(key);
   }
   if (perGroup.size === 0) {
-    return { groupColumn: header[groupIdx], groupCounts: [], observations: [] };
+    return { groupColumn: header[groupIdx], groupCounts: [], batchColumn: null, batchDesign: "none", observations: [] };
   }
 
   const groupCounts: GroupCount[] = [...perGroup.entries()]
@@ -138,7 +142,7 @@ export function reviewSamplesheetContent(
       topic: "design",
       message: `Only one group ("${groupCounts[0].group}") is present in the samplesheet; any comparison groups must be defined elsewhere (e.g. a contrasts file).`,
     });
-    return { groupColumn: col, groupCounts, observations };
+    return { groupColumn: col, groupCounts, batchColumn: null, batchDesign: "none", observations };
   }
 
   const singles = groupCounts.filter((g) => g.replicates <= 1).map((g) => g.group);
@@ -186,21 +190,24 @@ export function reviewSamplesheetContent(
 
   // Batch/covariate analysis: is a technical batch variable confounded with the
   // condition (can't be separated), or crossed (should be modelled as a covariate)?
+  let batchColumn: string | null = null;
+  let batchDesign: BatchDesign = "none";
   const batchIdx = header.findIndex((h) => BATCH_COLUMN_RE.test(h));
   if (batchIdx !== -1 && batchIdx !== groupIdx) {
     const pairs = rows
       .map((r) => ({ condition: (r[groupIdx] ?? "").trim(), batch: (r[batchIdx] ?? "").trim() }))
       .filter((p) => p.condition !== "" && p.batch !== "");
     const batchCol = header[batchIdx];
-    const design = classifyBatchDesign(pairs);
-    if (design === "confounded") {
+    batchColumn = batchCol;
+    batchDesign = classifyBatchDesign(pairs);
+    if (batchDesign === "confounded") {
       observations.push({
         severity: "risk",
         topic: "batch effects",
         message: `The "${batchCol}" variable is confounded with "${col}" — each ${batchCol} contains a single ${col}, so batch effects can't be separated from the biology.`,
         suggestion: `Spread each condition across multiple ${batchCol}s (or vice versa); as designed, a difference could be batch rather than biological.`,
       });
-    } else if (design === "crossed") {
+    } else if (batchDesign === "crossed") {
       observations.push({
         severity: "caution",
         topic: "batch effects",
@@ -210,5 +217,5 @@ export function reviewSamplesheetContent(
     }
   }
 
-  return { groupColumn: col, groupCounts, observations };
+  return { groupColumn: col, groupCounts, batchColumn, batchDesign, observations };
 }
