@@ -1755,7 +1755,10 @@ export class Agent {
   // --- Project memory (Phase 6) ---
 
   private memoryPath(): string {
-    return this.config.memory.path ?? defaultMemoryPath();
+    // Per-project by default: <workspace>/.hirsh/memory.json (the CLI chdirs into
+    // the workspace), so each project keeps its own history. An explicit
+    // config.memory.path still wins (e.g. a shared/global store).
+    return this.config.memory.path ?? defaultMemoryPath(process.cwd());
   }
 
   private mem(): MemoryData {
@@ -2060,7 +2063,7 @@ export class Agent {
     const preferred = remembered ?? this.config.execution.containerEngine;
     if (remembered && remembered !== this.config.execution.containerEngine) {
       this.io.info(
-        `From your project memory: the last run on this machine used ${BACKENDS[remembered].label}; ` +
+        `From your project memory: the last run in this project used ${BACKENDS[remembered].label}; ` +
           "I'll default to it (you can still switch).",
       );
     }
@@ -2102,7 +2105,7 @@ export class Agent {
     const defaultQueue = (remembered ? pref.queue : undefined) ?? this.config.execution.queue;
     if (remembered && remembered !== (this.config.execution.executor ?? "local")) {
       this.io.info(
-        `From your project memory: the last run on this machine used ${EXECUTORS[remembered].label}` +
+        `From your project memory: the last run in this project used ${EXECUTORS[remembered].label}` +
           (pref.queue ? ` (queue "${pref.queue}")` : "") +
           "; I'll default to it (you can still switch).",
       );

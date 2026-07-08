@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   addRun,
+  defaultMemoryPath,
   emptyMemory,
   extractReferences,
   knownReferences,
@@ -24,6 +25,15 @@ const run = (over: Partial<RunRecord>): RunRecord => ({
   executed: true,
   exitCode: 0,
   ...over,
+});
+
+describe("defaultMemoryPath", () => {
+  it("is per-project under the workspace when a base dir is given", () => {
+    expect(defaultMemoryPath("/home/sci/study-a")).toBe("/home/sci/study-a/.hirsh/memory.json");
+  });
+  it("falls back to the machine-global location without a base dir", () => {
+    expect(defaultMemoryPath()).toMatch(/\.bioagent[/\\]memory\.json$/);
+  });
 });
 
 describe("addRun", () => {

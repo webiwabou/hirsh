@@ -6,7 +6,9 @@
  * environment and drives the conversational loop. Configuration, provider and
  * environment errors are surfaced as clear messages, never as raw stack traces.
  */
+import { existsSync, statSync } from "node:fs";
 import chalk from "chalk";
+import { resolveWorkspace } from "./workspace.js";
 import { ConfigError, loadConfig } from "../config/loadConfig.js";
 import type { HirshConfig } from "../config/types.js";
 import { createProvider, ProviderError, type LLMProvider } from "../llm/index.js";
@@ -60,6 +62,18 @@ function fatal(message: string): never {
 }
 
 async function main(): Promise<void> {
+  // --- Workspace ---
+  // Operate inside the scientist's chosen project folder (like an editor opened
+  // in a directory): runs, ./config.yaml and per-project memory land there, not
+  // inside the Hirsh install. `hirsh [path]` / `--workdir <path>` / HIRSH_WORKSPACE.
+  const ws = resolveWorkspace(process.argv.slice(2), process.env, process.cwd());
+  if (ws.source !== "cwd") {
+    if (!existsSync(ws.path) || !statSync(ws.path).isDirectory()) {
+      fatal(`Workspace directory not found: ${ws.path}`);
+    }
+    process.chdir(ws.path);
+  }
+
   // --- Configuration ---
   let config: HirshConfig;
   let sourcePath: string | null;

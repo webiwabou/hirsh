@@ -54,7 +54,13 @@ export function emptyMemory(): MemoryData {
   return { version: 1, runs: [] };
 }
 
-export function defaultMemoryPath(): string {
+/**
+ * Where project memory lives. With a `baseDir` (the workspace) it is per-project
+ * (`<workspace>/.hirsh/memory.json`) so a scientist juggling projects keeps each
+ * one's history separate; without it, the legacy machine-global location.
+ */
+export function defaultMemoryPath(baseDir?: string): string {
+  if (baseDir !== undefined) return join(baseDir, ".hirsh", "memory.json");
   return join(homedir(), ".bioagent", "memory.json");
 }
 
@@ -111,7 +117,7 @@ export function relevantRuns(data: MemoryData, query: QueryContext, limit = 3): 
     .map((x) => x.r);
 }
 
-/** A remembered environment choice, re-proposed as the default on this machine. */
+/** A remembered environment choice, re-proposed as the default in this project. */
 export interface EnvironmentPreference {
   engine?: string;
   /** Raw executor id (local/slurm/…). */
@@ -120,9 +126,9 @@ export interface EnvironmentPreference {
 }
 
 /**
- * The backend/executor most recently used on this machine (memory is per-home,
- * so per-machine). Re-proposed as the default so the scientist doesn't re-pick
- * the same environment every session. Pure; scans newest-first.
+ * The backend/executor most recently used in this project (memory is per-project
+ * under the workspace). Re-proposed as the default so the scientist doesn't
+ * re-pick the same environment every session. Pure; scans newest-first.
  */
 export function preferredEnvironment(data: MemoryData): EnvironmentPreference {
   const pref: EnvironmentPreference = {};

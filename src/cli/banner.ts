@@ -59,6 +59,7 @@ export function renderWelcome(info: WelcomeInfo): string {
   const meta = [
     label("model") + info.providerLabel,
     label("config") + info.configSource,
+    label("workspace") + info.cwd + chalk.gray("  (runs → ./runs)"),
     label("pipelines") + info.pipelines.join(", "),
     label("env") + info.envLine,
   ];
